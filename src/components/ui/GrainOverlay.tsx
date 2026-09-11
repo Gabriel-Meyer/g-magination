@@ -1,13 +1,9 @@
-import { usePrefersReducedMotion } from '../../hooks/usePrefersReducedMotion'
-
 /**
- * Fixed full-screen film-grain overlay built from an SVG turbulence filter.
- * Sits above everything, ignores pointer events, and drifts slowly unless the
- * user prefers reduced motion. Soft-light blend keeps the grain monochrome.
+ * Fixed full-screen film-grain overlay built from a static SVG turbulence
+ * filter — rasterized once; an animated baseFrequency would recompute the
+ * noise on the CPU every frame, which mobile devices cannot afford.
  */
 export function GrainOverlay() {
-  const reduced = usePrefersReducedMotion()
-
   return (
     <div
       aria-hidden="true"
@@ -21,16 +17,7 @@ export function GrainOverlay() {
             baseFrequency="0.9"
             numOctaves="2"
             stitchTiles="stitch"
-          >
-            {!reduced && (
-              <animate
-                attributeName="baseFrequency"
-                dur="14s"
-                values="0.9;0.78;0.9"
-                repeatCount="indefinite"
-              />
-            )}
-          </feTurbulence>
+          />
           <feColorMatrix type="saturate" values="0" />
         </filter>
         <rect width="100%" height="100%" filter="url(#grain-noise)" />

@@ -19,7 +19,7 @@ export function TopBar() {
     <header
       className={`fixed inset-x-0 top-0 z-50 transition-all duration-700 ease-[cubic-bezier(0.16,1,0.3,1)] ${
         scrolled
-          ? 'border-b border-ink/5 bg-paper/70 py-4 backdrop-blur-md'
+          ? 'border-b border-ink/5 bg-paper/90 py-4 sm:bg-paper/70 sm:backdrop-blur-md'
           : 'border-b border-transparent py-6'
       }`}
     >

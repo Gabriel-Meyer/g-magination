@@ -530,7 +530,8 @@
 .qf-orb {
   position: absolute;
   border-radius: 9999px;
-  filter: blur(46px);
+  /* No filter: the softness lives in the gradient itself — blur() on layers
+     this large re-rasterizes constantly on mobile GPUs. */
 }
 .qf-drift-a {
   animation: qf-drift-a 34s ease-in-out infinite;
@@ -545,8 +546,11 @@
 .qf-mote {
   position: absolute;
   border-radius: 9999px;
-  background: var(--color-rose-deep);
-  filter: blur(2px);
+  background: radial-gradient(
+    circle,
+    var(--color-rose-deep) 0%,
+    transparent 70%
+  );
   animation: mote-rise var(--md, 60s) linear infinite;
   animation-delay: var(--mdel, 0s);
   opacity: 0;

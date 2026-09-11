@@ -33,14 +33,14 @@ export function QuietField() {
           className="qf-orb qf-drift-a left-[8%] top-[12%] h-[58vmin] w-[58vmin]"
           style={{
             background:
-              'radial-gradient(circle, rgba(216,167,160,0.34) 0%, transparent 70%)',
+              'radial-gradient(circle, rgba(216,167,160,0.32) 0%, rgba(216,167,160,0.16) 42%, transparent 72%)',
           }}
         />
         <div
           className="qf-orb qf-drift-b left-[58%] top-[52%] h-[64vmin] w-[64vmin]"
           style={{
             background:
-              'radial-gradient(circle, rgba(247,233,215,0.55) 0%, transparent 70%)',
+              'radial-gradient(circle, rgba(247,233,215,0.5) 0%, rgba(247,233,215,0.24) 42%, transparent 72%)',
           }}
         />
       </div>
@@ -51,7 +51,7 @@ export function QuietField() {
           className="qf-orb qf-drift-c left-[30%] top-[64%] h-[36vmin] w-[36vmin]"
           style={{
             background:
-              'radial-gradient(circle, rgba(216,167,160,0.3) 0%, transparent 68%)',
+              'radial-gradient(circle, rgba(216,167,160,0.28) 0%, rgba(216,167,160,0.13) 42%, transparent 70%)',
           }}
         />
       </div>

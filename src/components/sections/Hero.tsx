@@ -40,6 +40,15 @@ export function Hero() {
     }
   }, [])
 
+  // Clicking the pull switch scrolls smoothly to the other state: into the
+  // lit hold when dark (so you watch the cord pull on the way), back to the
+  // top when lit.
+  const toggleSwitch = () => {
+    const h = window.innerHeight
+    const lit = window.scrollY / h >= LIT_AT
+    window.scrollTo({ top: lit ? 0 : Math.round(h * 0.72), behavior: 'smooth' })
+  }
+
   return (
     <section id="top" className="relative h-[280svh]">
       <div
@@ -70,8 +79,7 @@ export function Hero() {
               className="quiet-breath h-[42vmin] w-[42vmin] rounded-full"
               style={{
                 background:
-                  'radial-gradient(circle, rgba(216,167,160,0.22) 0%, transparent 70%)',
-                filter: 'blur(34px)',
+                  'radial-gradient(circle, rgba(216,167,160,0.2) 0%, rgba(216,167,160,0.1) 45%, transparent 72%)',
               }}
             />
           </div>
@@ -80,10 +88,10 @@ export function Hero() {
         {/* The dark, until someone pulls the switch. */}
         <div aria-hidden="true" className="hero-veil" />
 
-        <HeroLamp />
+        <HeroLamp onToggle={toggleSwitch} />
 
         <div
-          className="relative z-10 flex h-full w-full flex-col items-center justify-center px-6 pt-[16svh] text-center"
+          className="pointer-events-none relative z-10 flex h-full w-full flex-col items-center justify-center px-6 pt-[16svh] text-center"
           style={{
             transform: 'translateY(calc(var(--hx, 0) * -10vh))',
             opacity: 'calc(1 - var(--hx, 0))',
@@ -114,7 +122,7 @@ export function Hero() {
         </div>
 
         <div
-          className="absolute bottom-10 left-1/2 z-10 -translate-x-1/2"
+          className="pointer-events-none absolute bottom-10 left-1/2 z-10 -translate-x-1/2"
           style={{ opacity: 'calc(1 - var(--hx, 0) * 2.5)' }}
         >
           <div className="animate-fade-rise" style={{ animationDelay: '1.1s' }}>
@@ -129,14 +137,13 @@ export function Hero() {
 /**
  * The lamp: a grand old fabric shade — pleated, scallop-trimmed, fringed —
  * hanging on its red cable at the left edge of the screen, only half in
- * frame. The pull switch hangs from the shade's rim. It fades out with the
+ * frame. The pull switch hangs from the shade's rim and is clickable — it\n * scroll-toggles the light. The lamp fades out with the
  * hero text, a touch earlier (--hx). Colors flip with the dark phase in
  * index.css.
  */
-function HeroLamp() {
+function HeroLamp({ onToggle }: { onToggle: () => void }) {
   return (
     <div
-      aria-hidden="true"
       className="hero-lamp pointer-events-none absolute right-0 top-0 z-[5] h-[52svh] translate-x-1/2 sm:h-[66svh]"
       style={{
         rotate: 'calc(var(--nx, 0) * 1.2deg)',
@@ -145,18 +152,32 @@ function HeroLamp() {
       }}
     >
       {/* The light pooling out from under the shade. */}
-      <div className="lamp-glow-wrap absolute left-1/2 top-[56%] -translate-x-1/2 -translate-y-1/2">
+      <div
+        aria-hidden="true"
+        className="lamp-glow-wrap absolute left-1/2 top-[56%] -translate-x-1/2 -translate-y-1/2"
+      >
         <div
           className="quiet-breath h-[72vmin] w-[72vmin] rounded-full"
           style={{
             background:
-              'radial-gradient(circle, rgba(255,223,158,0.6) 0%, rgba(247,201,138,0.3) 45%, transparent 72%)',
-            filter: 'blur(30px)',
+              'radial-gradient(circle, rgba(255,223,158,0.55) 0%, rgba(247,201,138,0.28) 42%, rgba(247,201,138,0.1) 62%, transparent 75%)',
           }}
         />
       </div>
 
-      <svg viewBox="0 0 400 620" className="hero-lamp-svg relative h-full">
+      {/* Invisible click target over the pull cord (x≈33% of the shade). */}
+      <button
+        type="button"
+        onClick={onToggle}
+        data-cursor
+        aria-label="pull the light switch"
+        className="pointer-events-auto absolute bottom-0 left-[33%] top-[58%] z-10 w-12 -translate-x-1/2"
+      />
+      <svg
+        aria-hidden="true"
+        viewBox="0 0 400 620"
+        className="hero-lamp-svg relative h-full"
+      >
         <defs>
           <linearGradient id="shade-grad" x1="0" y1="0" x2="0" y2="1">
             <stop offset="0%" stopColor="#f8ecca" />
