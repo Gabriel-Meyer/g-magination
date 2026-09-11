@@ -677,7 +677,9 @@
 /* Sticky hero viewport: dvh follows the mobile URL bar collapsing, so the
    dark scene always covers the whole visible screen (svh as fallback). */
 .hero-viewport {
-  height: 100svh;
+  /* min-height carries the svh fallback — a duplicate height declaration
+     would be minified away by Lightning CSS. */
+  min-height: 100svh;
   height: 100dvh;
 }
 
