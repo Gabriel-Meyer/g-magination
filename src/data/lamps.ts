@@ -30,7 +30,7 @@ export const LAMPS: Lamp[] = [
     number: 'lamp no. 002',
     tagline: 'sixteen ikea globes, zip ties, and gravity.',
     hero: {
-      src: '/work/bubblegum/hero.jpg',
+      src: 'work/bubblegum/hero.jpg',
       alt: 'The Bubblegum lamp glowing bright orange, hanging from a red cable between attic skylights',
       caption: 'glowing under the skylights',
     },
@@ -42,17 +42,17 @@ export const LAMPS: Lamp[] = [
     chips: ['16 ikea globes', 'zip ties', 'gravity', 'Ø 570 mm'],
     gallery: [
       {
-        src: '/work/bubblegum/off.jpg',
+        src: 'work/bubblegum/off.jpg',
         alt: 'The Bubblegum lamp switched off, a cluster of dusty-rose glass globes',
         caption: 'lights off — suddenly dusty rose',
       },
       {
-        src: '/work/bubblegum/stairwell.jpg',
+        src: 'work/bubblegum/stairwell.jpg',
         alt: 'The Bubblegum lamp glowing warm orange in a white stairwell full of plants',
         caption: 'at home in the stairwell',
       },
       {
-        src: '/work/bubblegum/render.jpg',
+        src: 'work/bubblegum/render.jpg',
         alt: 'CAD render of the Bubblegum lamp — soft coral globes on a black cable',
         caption: 'how it was planned (the render was politer)',
       },
@@ -72,7 +72,7 @@ export const LAMPS: Lamp[] = [
     number: 'lamp no. 001',
     tagline: 'a steel panel, floating on light.',
     hero: {
-      src: '/work/sr01/hero.jpg',
+      src: 'work/sr01/hero.jpg',
       alt: 'SR01 on the wall — a raw steel panel floating over a plywood body, warm light spilling from behind',
       caption: 'on the wall, doing its thing',
     },
@@ -84,12 +84,12 @@ export const LAMPS: Lamp[] = [
     chips: ['raw steel', 'birch plywood', 'invisible bulb', 'wall-mounted'],
     gallery: [
       {
-        src: '/work/sr01/detail.jpg',
+        src: 'work/sr01/detail.jpg',
         alt: 'Close-up of SR01 — the plywood edge and steel panel with light glowing in the gap between them',
         caption: 'the gap where the light lives',
       },
       {
-        src: '/work/sr01/workbench.jpg',
+        src: 'work/sr01/workbench.jpg',
         alt: 'SR01 lying on the workbench, a thin line of light glowing along its edge',
         caption: 'first light, still on the workbench',
       },
