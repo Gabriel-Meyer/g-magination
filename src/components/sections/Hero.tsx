@@ -116,8 +116,8 @@ export function Hero() {
             className="hero-sub animate-fade-rise mt-12 max-w-sm text-balance text-sm font-light leading-relaxed sm:text-base"
             style={{ animationDelay: '0.7s' }}
           >
-            a tiny studio in vienna, turning ordinary things into lamps. two
-            exist so far — a third is being argued with.
+            a dude in vienna, building cool light pieces out of pure passion.
+            are you curious what comes next?
           </p>
         </div>
 
