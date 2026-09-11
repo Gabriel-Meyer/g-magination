@@ -52,7 +52,7 @@ export function Hero() {
   return (
     <section id="top" className="relative h-[280svh]">
       <div
-        className="sticky top-0 flex h-svh flex-col overflow-clip"
+        className="hero-viewport sticky top-0 flex flex-col overflow-x-clip"
         style={
           {
             // Exit progress: 0 while pinned, 1 as the section releases.

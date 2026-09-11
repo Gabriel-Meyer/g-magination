@@ -222,24 +222,6 @@
   }
 }
 
-/* Motes — tiny blurred specks of light rising the full height. */
-@keyframes mote-rise {
-  0% {
-    transform: translateY(0);
-    opacity: 0;
-  }
-  12% {
-    opacity: var(--mo, 0.4);
-  }
-  88% {
-    opacity: var(--mo, 0.4);
-  }
-  100% {
-    transform: translateY(-116vh);
-    opacity: 0;
-  }
-}
-
 @keyframes cue-fall {
   0% {
     transform: translateY(-100%);
@@ -543,20 +525,6 @@
   animation: qf-drift-c 28s ease-in-out infinite;
 }
 
-.qf-mote {
-  position: absolute;
-  border-radius: 9999px;
-  background: radial-gradient(
-    circle,
-    var(--color-rose-deep) 0%,
-    transparent 70%
-  );
-  animation: mote-rise var(--md, 60s) linear infinite;
-  animation-delay: var(--mdel, 0s);
-  opacity: 0;
-  will-change: transform, opacity;
-}
-
 /* ------------------------------------------------------------------ */
 /*  Quiet cursor — an ink point carrying a small pool of rose light.  */
 /*  JS positions the two fixed elements; these rules handle look and  */
@@ -695,11 +663,6 @@
   }
   /* The pile flip stays — it only ever runs as a direct response to a
      click, never on its own. */
-  /* Motes only exist as motion — remove them entirely. */
-  .qf-mote {
-    animation: none;
-    display: none;
-  }
   .qf-layer {
     transform: none;
   }
@@ -711,9 +674,19 @@
 /*  `hero-dark` (see Hero.tsx); everything below flips with a soft     */
 /*  transition when the light clicks on.                               */
 /* ------------------------------------------------------------------ */
+/* Sticky hero viewport: dvh follows the mobile URL bar collapsing, so the
+   dark scene always covers the whole visible screen (svh as fallback). */
+.hero-viewport {
+  height: 100svh;
+  height: 100dvh;
+}
+
 .hero-veil {
   position: absolute;
   inset: 0;
+  /* Overhang below the fold — belt and braces against the one-frame gap
+     while the mobile URL bar is animating away. */
+  bottom: -20vh;
   z-index: 1;
   background: #1a1310;
   opacity: 0;
