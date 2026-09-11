@@ -1,0 +1,914 @@
+@import 'tailwindcss';
+
+/* Self-hosted Space Grotesk — the single face of the quiet world.
+   Light for display, regular for body, medium for the wordmark. */
+@import '@fontsource/space-grotesk/300.css';
+@import '@fontsource/space-grotesk/400.css';
+@import '@fontsource/space-grotesk/500.css';
+
+/* ------------------------------------------------------------------ */
+/*  Brand design tokens — direction 04 "Quiet" (pastel studio).       */
+/*  Blush paper, warm ink, dusty rose. Warmth comes from light, not   */
+/*  saturation; nothing on the page is brighter than the glow.        */
+/* ------------------------------------------------------------------ */
+@theme {
+  --color-paper: #f3e9e7; /* blush paper ground                  */
+  --color-ink: #2a2422; /* warm near-black text                */
+  --color-taupe: #6b5f5b; /* secondary text                      */
+  --color-rose: #d8a7a0; /* dusty rose — the light's color      */
+  --color-rose-deep: #b98a82; /* rose for small type / accents       */
+  --color-cream: #f7e9d7; /* the warm core of the glow           */
+  --color-coral: #eda183; /* bubblegum coral — the fun accent    */
+
+  --font-grotesk: 'Space Grotesk', ui-sans-serif, system-ui, sans-serif;
+}
+
+@layer base {
+  :root {
+    color-scheme: light;
+  }
+
+  html {
+    scroll-behavior: smooth;
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+
+  body {
+    margin: 0;
+    background-color: var(--color-paper);
+    color: var(--color-ink);
+    font-family: var(--font-grotesk);
+    font-weight: 400;
+    overflow-x: hidden;
+  }
+
+  /* Visible, on-brand focus ring for keyboard users. */
+  :focus-visible {
+    outline: 1.5px solid var(--color-rose-deep);
+    outline-offset: 4px;
+    border-radius: 2px;
+  }
+
+  ::selection {
+    background: color-mix(in srgb, var(--color-rose) 45%, transparent);
+    color: var(--color-ink);
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    html {
+      scroll-behavior: auto;
+    }
+  }
+}
+
+/* Lowercase kicker labels with generous tracking. (Not named `overline` —
+   that's a Tailwind core text-decoration utility.) */
+@utility quiet-label {
+  font-size: 0.7rem;
+  font-weight: 500;
+  letter-spacing: 0.32em;
+  text-transform: lowercase;
+  color: var(--color-rose-deep);
+}
+
+/* ------------------------------------------------------------------ */
+/*  Motion — deterministic CSS. Scroll, tilt, and cursor publish CSS  */
+/*  variables on :root (see hooks):                                   */
+/*    --sp   scroll progress through the first viewport, 0..1         */
+/*    --syv  viewport-heights scrolled, unclamped (field parallax)    */
+/*    --nx / --ny  damped pointer-or-tilt position, -1..1             */
+/*  Everything degrades to a still, fully-visible page and is         */
+/*  disabled under prefers-reduced-motion.                            */
+/* ------------------------------------------------------------------ */
+@keyframes fade-rise {
+  from {
+    opacity: 0;
+    transform: translateY(26px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes fade-soft {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+/* Leafing arcs for the photo pile — out to the side, then under (or the
+   mirror: out from under, then on top). var() frames = current pile pose. */
+@keyframes leaf-under-right {
+  0% {
+    translate: 0 0;
+    rotate: -1.6deg;
+    scale: 1;
+    animation-timing-function: cubic-bezier(0.25, 0, 0.3, 1);
+  }
+  48% {
+    translate: 103% 3%;
+    rotate: 8deg;
+    scale: 0.985;
+    animation-timing-function: cubic-bezier(0.5, 0, 0.25, 1);
+  }
+  100% {
+    translate: var(--tx, 0px) var(--ty, 0px);
+    rotate: var(--rot, 0deg);
+    scale: var(--sc, 1);
+  }
+}
+@keyframes leaf-under-left {
+  0% {
+    translate: 0 0;
+    rotate: -1.6deg;
+    scale: 1;
+    animation-timing-function: cubic-bezier(0.25, 0, 0.3, 1);
+  }
+  48% {
+    translate: -103% 3%;
+    rotate: -8deg;
+    scale: 0.985;
+    animation-timing-function: cubic-bezier(0.5, 0, 0.25, 1);
+  }
+  100% {
+    translate: var(--tx, 0px) var(--ty, 0px);
+    rotate: var(--rot, 0deg);
+    scale: var(--sc, 1);
+  }
+}
+@keyframes leaf-onto-right {
+  0% {
+    translate: var(--tx, 0px) var(--ty, 0px);
+    rotate: var(--rot, 0deg);
+    scale: var(--sc, 1);
+    animation-timing-function: cubic-bezier(0.25, 0, 0.3, 1);
+  }
+  52% {
+    translate: 103% 3%;
+    rotate: 8deg;
+    scale: 0.985;
+    animation-timing-function: cubic-bezier(0.5, 0, 0.25, 1);
+  }
+  100% {
+    translate: 0 0;
+    rotate: -1.6deg;
+    scale: 1;
+  }
+}
+@keyframes leaf-onto-left {
+  0% {
+    translate: var(--tx, 0px) var(--ty, 0px);
+    rotate: var(--rot, 0deg);
+    scale: var(--sc, 1);
+    animation-timing-function: cubic-bezier(0.25, 0, 0.3, 1);
+  }
+  52% {
+    translate: -103% 3%;
+    rotate: -8deg;
+    scale: 0.985;
+    animation-timing-function: cubic-bezier(0.5, 0, 0.25, 1);
+  }
+  100% {
+    translate: 0 0;
+    rotate: -1.6deg;
+    scale: 1;
+  }
+}
+
+/* Slow idle breath for pools of light. */
+@keyframes breath {
+  0%,
+  100% {
+    transform: scale(1);
+    opacity: 0.88;
+  }
+  50% {
+    transform: scale(1.07);
+    opacity: 1;
+  }
+}
+
+/* Field orbs — three drift paths so the light never sits still. */
+@keyframes qf-drift-a {
+  0%,
+  100% {
+    transform: translate(0, 0) scale(1);
+  }
+  50% {
+    transform: translate(6%, -8%) scale(1.12);
+  }
+}
+@keyframes qf-drift-b {
+  0%,
+  100% {
+    transform: translate(0, 0) scale(1.06);
+  }
+  50% {
+    transform: translate(-8%, 6%) scale(0.94);
+  }
+}
+@keyframes qf-drift-c {
+  0%,
+  100% {
+    transform: translate(0, 0) scale(0.96);
+  }
+  50% {
+    transform: translate(5%, 9%) scale(1.08);
+  }
+}
+
+/* Motes — tiny blurred specks of light rising the full height. */
+@keyframes mote-rise {
+  0% {
+    transform: translateY(0);
+    opacity: 0;
+  }
+  12% {
+    opacity: var(--mo, 0.4);
+  }
+  88% {
+    opacity: var(--mo, 0.4);
+  }
+  100% {
+    transform: translateY(-116vh);
+    opacity: 0;
+  }
+}
+
+@keyframes cue-fall {
+  0% {
+    transform: translateY(-100%);
+    opacity: 0;
+  }
+  25% {
+    opacity: 1;
+  }
+  75% {
+    opacity: 1;
+  }
+  100% {
+    transform: translateY(380%);
+    opacity: 0;
+  }
+}
+
+/* A tiny wiggle for playful hovers (nav links, handles). */
+@keyframes wiggle {
+  0%,
+  100% {
+    rotate: 0deg;
+  }
+  30% {
+    rotate: -2.5deg;
+  }
+  70% {
+    rotate: 2.5deg;
+  }
+}
+
+@layer utilities {
+  /* Mount reveal for above-the-fold hero content. */
+  .animate-fade-rise {
+    animation: fade-rise 1.3s cubic-bezier(0.16, 1, 0.3, 1) both;
+  }
+
+  /* Playful hover: a quick little wiggle. */
+  .wiggle-hover:hover {
+    animation: wiggle 0.4s ease-in-out;
+  }
+
+  /* Paper prints lying on the table: white border like a printed photo,
+     barely-rounded corners, a slight resting rotation (--rot). Hovering picks
+     the print up — it straightens, lifts, and casts a deeper shadow. */
+  .paper-print {
+    display: block;
+    background: #fdfaf7;
+    padding: 0.7rem;
+    border-radius: 3px;
+    rotate: var(--rot, 0deg);
+    box-shadow:
+      0 1px 2px rgba(42, 36, 34, 0.1),
+      0 14px 28px -16px rgba(151, 103, 94, 0.45);
+    transition:
+      rotate 0.5s cubic-bezier(0.34, 1.56, 0.64, 1),
+      translate 0.5s cubic-bezier(0.34, 1.56, 0.64, 1),
+      box-shadow 0.5s ease;
+  }
+  .paper-print img {
+    display: block;
+    border-radius: 2px;
+  }
+  .group:hover .paper-print,
+  .paper-print:hover {
+    rotate: 0deg;
+    translate: 0 -7px;
+    box-shadow:
+      0 2px 4px rgba(42, 36, 34, 0.08),
+      0 26px 44px -20px rgba(151, 103, 94, 0.55);
+  }
+
+  /* Masking-tape labels — straight-ish edges, faintly torn corners. */
+  .tape {
+    display: inline-block;
+    padding: 0.35rem 0.95rem;
+    background: rgba(247, 238, 224, 0.92);
+    border-radius: 1px;
+    rotate: var(--rot, 0deg);
+    box-shadow: 0 1px 3px rgba(42, 36, 34, 0.14);
+    clip-path: polygon(
+      0% 12%,
+      3% 0%,
+      97% 3%,
+      100% 14%,
+      99% 88%,
+      96% 100%,
+      3% 97%,
+      1% 86%
+    );
+    font-size: 0.72rem;
+    font-weight: 500;
+    letter-spacing: 0.07em;
+    text-transform: lowercase;
+    color: var(--color-taupe);
+  }
+
+  /* The photo pile: cards share the print look; the top card sits in normal
+     flow and gives the pile its size, the rest lie behind it (absolute).
+     Poses come from --rot/--tx/--ty per stack position and transition when
+     the pile shuffles. */
+  .stack-card {
+    position: absolute;
+    inset: 0;
+    background: #fdfaf7;
+    padding: 0.7rem;
+    border-radius: 3px;
+    rotate: var(--rot, 0deg);
+    translate: var(--tx, 0px) var(--ty, 0px);
+    scale: var(--sc, 1);
+    backface-visibility: hidden;
+    box-shadow:
+      0 1px 2px rgba(42, 36, 34, 0.1),
+      0 14px 28px -16px rgba(151, 103, 94, 0.45);
+    transition:
+      rotate 0.55s cubic-bezier(0.34, 1.56, 0.64, 1),
+      translate 0.55s cubic-bezier(0.34, 1.56, 0.64, 1),
+      scale 0.55s cubic-bezier(0.34, 1.56, 0.64, 1);
+  }
+  .stack-card.is-top {
+    position: relative;
+    inset: auto;
+  }
+  .stack-card img {
+    display: block;
+    border-radius: 2px;
+  }
+  /* Leafing — like photos in your hand. One keyframe journey per card:
+     swipe flat out to the side (decelerating), then dive under the pile and
+     slide back in. The boundary frames read the pose variables live, so when
+     the pile reorders mid-flight (while the card is fully out at the side,
+     overlapping nothing) the destination updates seamlessly. `both` keeps
+     the end frame until React drops the class onto identical pose values. */
+  .stack-card.is-leafing-under-left {
+    animation: leaf-under-left 0.72s both;
+  }
+  .stack-card.is-leafing-under-right {
+    animation: leaf-under-right 0.72s both;
+  }
+  .stack-card.is-leafing-onto-left {
+    animation: leaf-onto-left 0.72s both;
+  }
+  .stack-card.is-leafing-onto-right {
+    animation: leaf-onto-right 0.72s both;
+  }
+
+  /* Picking up the pile a little on hover. */
+  .stack:hover .stack-card.is-top:not([class*='is-leafing']) {
+    translate: 0 -6px;
+  }
+  .stack-caption {
+    animation: fade-soft 0.5s ease both;
+  }
+
+  /* Big bare chevrons floating beside the pile — no box, just the angle. */
+  .stack-chevron {
+    position: absolute;
+    top: 50%;
+    z-index: 20;
+    translate: 0 -50%;
+    padding: 0.5rem;
+    transition:
+      translate 0.3s cubic-bezier(0.34, 1.56, 0.64, 1),
+      opacity 0.25s ease;
+  }
+  .stack-chevron svg {
+    display: block;
+    fill: none;
+    stroke: rgba(42, 36, 34, 0.35);
+    stroke-width: 2.2;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+    /* Faint paper-light halo so they read over photo edges on small screens. */
+    filter: drop-shadow(0 0 6px rgba(253, 250, 247, 0.9));
+    transition: stroke 0.25s ease;
+  }
+  .stack-chevron:hover svg {
+    stroke: var(--color-ink);
+  }
+  .stack-chevron-left:hover {
+    translate: -4px -50%;
+  }
+  .stack-chevron-right:hover {
+    translate: 4px -50%;
+  }
+  .stack-chevron:active {
+    scale: 0.88;
+  }
+
+  /* A note that's taped to the table. */
+  .paper-note {
+    position: relative;
+    background: #fbf5ee;
+    border-radius: 2px;
+    rotate: var(--rot, 0.5deg);
+    box-shadow:
+      0 1px 2px rgba(42, 36, 34, 0.08),
+      0 16px 32px -18px rgba(151, 103, 94, 0.4);
+  }
+  .tape-strip {
+    position: absolute;
+    top: -0.7rem;
+    left: 50%;
+    width: 5.5rem;
+    height: 1.4rem;
+    translate: -50% 0;
+    rotate: -2deg;
+    background: rgba(247, 238, 224, 0.85);
+    box-shadow: 0 1px 2px rgba(42, 36, 34, 0.1);
+    clip-path: polygon(
+      0% 15%,
+      2% 0%,
+      98% 4%,
+      100% 20%,
+      99% 85%,
+      97% 100%,
+      2% 96%,
+      0% 82%
+    );
+  }
+
+  /* Small lowercase fact-chips on the lamp cards. */
+  .chip {
+    display: inline-block;
+    border: 1px solid rgba(42, 36, 34, 0.12);
+    background: rgba(255, 255, 255, 0.45);
+    border-radius: 9999px;
+    padding: 0.3rem 0.75rem;
+    font-size: 0.72rem;
+    font-weight: 500;
+    text-transform: lowercase;
+    letter-spacing: 0.06em;
+    color: var(--color-taupe);
+  }
+
+  /* SVG glow bits that breathe (transform-box so scale stays centered). */
+  .svg-breath {
+    animation: breath 5s ease-in-out infinite;
+    transform-box: fill-box;
+    transform-origin: center;
+  }
+
+  /* Scroll reveal — IntersectionObserver toggles `.is-visible`. */
+  .reveal {
+    opacity: 0;
+    transform: translateY(28px);
+    transition:
+      opacity 1.1s cubic-bezier(0.16, 1, 0.3, 1),
+      transform 1.1s cubic-bezier(0.16, 1, 0.3, 1);
+    will-change: opacity, transform;
+  }
+  .reveal.is-visible {
+    opacity: 1;
+    transform: none;
+  }
+
+  /* Travelling light for the scroll cue. */
+  .animate-cue {
+    animation: cue-fall 2.6s cubic-bezier(0.65, 0, 0.35, 1) infinite;
+  }
+
+  /* Idle breath for light pools. */
+  .quiet-breath {
+    animation: breath 5s ease-in-out infinite;
+  }
+}
+
+/* ------------------------------------------------------------------ */
+/*  Quiet field — the fixed, blurred light behind the whole page.     */
+/*  Layers carry a depth factor `--qd`; deeper layers move more with  */
+/*  cursor/tilt (--nx/--ny) and drift upward faster on scroll         */
+/*  (--syv), so the field has gentle parallax.                        */
+/* ------------------------------------------------------------------ */
+.qf-layer {
+  position: absolute;
+  inset: -12%;
+  transform: translate3d(
+    calc(var(--nx, 0) * var(--qd, 1) * 1.6vmin),
+    calc(
+      var(--ny, 0) * var(--qd, 1) * 1.6vmin - var(--syv, 0) * var(--qd, 1) *
+        3.5vh
+    ),
+    0
+  );
+  will-change: transform;
+}
+
+.qf-orb {
+  position: absolute;
+  border-radius: 9999px;
+  filter: blur(46px);
+}
+.qf-drift-a {
+  animation: qf-drift-a 34s ease-in-out infinite;
+}
+.qf-drift-b {
+  animation: qf-drift-b 41s ease-in-out infinite;
+}
+.qf-drift-c {
+  animation: qf-drift-c 28s ease-in-out infinite;
+}
+
+.qf-mote {
+  position: absolute;
+  border-radius: 9999px;
+  background: var(--color-rose-deep);
+  filter: blur(2px);
+  animation: mote-rise var(--md, 60s) linear infinite;
+  animation-delay: var(--mdel, 0s);
+  opacity: 0;
+  will-change: transform, opacity;
+}
+
+/* ------------------------------------------------------------------ */
+/*  Quiet cursor — an ink point carrying a small pool of rose light.  */
+/*  JS positions the two fixed elements; these rules handle look and  */
+/*  state. Only ever active on fine pointers without reduced motion.  */
+/* ------------------------------------------------------------------ */
+@media (pointer: fine) {
+  html.quiet-cursor,
+  html.quiet-cursor * {
+    cursor: none !important;
+  }
+}
+
+.qc {
+  position: fixed;
+  top: 0;
+  left: 0;
+  z-index: 90;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.35s ease;
+}
+.qc.is-visible {
+  opacity: 1;
+}
+
+.qc-bulb {
+  display: block;
+  width: 30px;
+  height: 40px;
+  /* Hotspot sits at the center of the glass (15/14 in the viewBox). */
+  margin: -14px 0 0 -15px;
+  overflow: visible;
+}
+
+/* The light — invisible until the bulb is switched on. */
+.qc-glow {
+  opacity: 0;
+  transition: opacity 0.22s ease;
+  transform-box: fill-box;
+  transform-origin: center;
+  transform: scale(0.8);
+}
+
+/* Glass and filament, off. */
+.qc-glass {
+  fill: rgba(255, 255, 255, 0.4);
+  stroke: var(--color-ink);
+  stroke-width: 1.5;
+  stroke-linejoin: round;
+  transition: fill 0.22s ease;
+}
+.qc-wires {
+  fill: none;
+  stroke: rgba(42, 36, 34, 0.55);
+  stroke-width: 1;
+  stroke-linecap: round;
+}
+.qc-filament {
+  fill: none;
+  stroke: rgba(42, 36, 34, 0.55);
+  stroke-width: 1.1;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  transition: stroke 0.22s ease;
+}
+
+/* Screw base. */
+.qc-base {
+  fill: #c4bab1;
+  stroke: var(--color-ink);
+  stroke-width: 1.3;
+  stroke-linejoin: round;
+}
+.qc-threads {
+  fill: none;
+  stroke: rgba(42, 36, 34, 0.45);
+  stroke-width: 1;
+  stroke-linecap: round;
+}
+.qc-tip {
+  fill: #8f867f;
+  stroke: var(--color-ink);
+  stroke-width: 1.1;
+}
+
+/* Hovering something clickable: the filament glimmers awake. */
+.qc.is-active .qc-glass {
+  fill: rgba(247, 233, 215, 0.75);
+}
+.qc.is-active .qc-filament {
+  stroke: var(--color-rose-deep);
+}
+.qc.is-active .qc-glow {
+  opacity: 0.35;
+  transform: scale(0.8);
+}
+
+/* Pressing switches it on: bright glass, hot filament, full glow. */
+.qc.is-down .qc-glass {
+  fill: #ffeccb;
+}
+.qc.is-down .qc-filament {
+  stroke: #e8833f;
+}
+.qc.is-down .qc-glow {
+  opacity: 1;
+  transform: scale(1.15);
+  transition:
+    opacity 0.12s ease,
+    transform 0.25s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-fade-rise,
+  .reveal,
+  .reveal.is-visible {
+    animation: none;
+    opacity: 1;
+    transform: none;
+    transition: none;
+  }
+  .animate-cue,
+  .quiet-breath,
+  .svg-breath,
+  .wiggle-hover:hover,
+  .qf-drift-a,
+  .qf-drift-b,
+  .qf-drift-c {
+    animation: none;
+  }
+  /* Prints keep their resting tilt; picking one up happens without a spring. */
+  .paper-print,
+  .group:hover .paper-print,
+  .paper-print:hover {
+    transition: none;
+  }
+  /* The pile flip stays — it only ever runs as a direct response to a
+     click, never on its own. */
+  /* Motes only exist as motion — remove them entirely. */
+  .qf-mote {
+    animation: none;
+    display: none;
+  }
+  .qf-layer {
+    transform: none;
+  }
+}
+
+/* ------------------------------------------------------------------ */
+/*  The hero's dark phase — before the switch is pulled. While the     */
+/*  visitor is in the unlit stretch of the pinned hero, <html> carries */
+/*  `hero-dark` (see Hero.tsx); everything below flips with a soft     */
+/*  transition when the light clicks on.                               */
+/* ------------------------------------------------------------------ */
+.hero-veil {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  background: #1a1310;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.55s ease;
+}
+html.hero-dark .hero-veil {
+  opacity: 1;
+  transition: opacity 0.3s ease;
+}
+
+/* Hero type. */
+.hero-title {
+  color: var(--color-ink);
+  transition: color 0.5s ease;
+}
+html.hero-dark .hero-title {
+  color: #f0e7e2;
+}
+.hero-sub {
+  color: var(--color-taupe);
+  transition: color 0.5s ease;
+}
+html.hero-dark .hero-sub {
+  color: #b3a69f;
+}
+
+/* Scroll cue. */
+.cue-label {
+  color: rgba(42, 36, 34, 0.4);
+  transition: color 0.5s ease;
+}
+.cue-line {
+  background: rgba(42, 36, 34, 0.15);
+  transition: background 0.5s ease;
+}
+.cue-light {
+  background: linear-gradient(to bottom, rgba(185, 138, 130, 0.8), transparent);
+}
+html.hero-dark .cue-label {
+  color: rgba(240, 231, 226, 0.55);
+}
+html.hero-dark .cue-line {
+  background: rgba(240, 231, 226, 0.22);
+}
+
+/* Top bar floats over the dark scene. */
+header,
+header a {
+  transition-property: color, background-color, border-color, padding;
+}
+html.hero-dark header {
+  background: transparent;
+  border-color: transparent;
+  backdrop-filter: none;
+}
+html.hero-dark header a {
+  color: #f0e7e2;
+}
+html.hero-dark header a:hover {
+  color: #ffffff;
+}
+
+/* The bulb cursor carries a light of its own in the dark. */
+html.hero-dark .qc-glass {
+  stroke: #f0e7e2;
+  fill: rgba(255, 255, 255, 0.07);
+}
+html.hero-dark .qc-wires,
+html.hero-dark .qc-filament,
+html.hero-dark .qc-threads {
+  stroke: rgba(240, 231, 226, 0.6);
+}
+html.hero-dark .qc-base {
+  fill: #4a423e;
+  stroke: #f0e7e2;
+}
+html.hero-dark .qc-tip {
+  fill: #6b625c;
+  stroke: #f0e7e2;
+}
+
+/* ------------------------------------------------------------------ */
+/*  The pendant lamp in the hero.                                      */
+/* ------------------------------------------------------------------ */
+.lamp-cord {
+  stroke: #a84b40;
+  stroke-width: 3.5;
+}
+.lamp-cap {
+  fill: #b08d52;
+  stroke: #8a6d3f;
+  stroke-width: 1.6;
+  transition:
+    fill 0.5s ease,
+    stroke 0.5s ease;
+}
+.lamp-shade {
+  stroke: #8a6d3f;
+  stroke-width: 2;
+  stroke-linejoin: round;
+  transition: stroke 0.5s ease;
+}
+/* Dark: CSS fill overrides the gradient presentation attribute. */
+html.hero-dark .lamp-shade {
+  fill: #241d18;
+  stroke: #cfc2b8;
+  stroke-width: 1.8;
+}
+.lamp-seams {
+  fill: none;
+  stroke: rgba(138, 109, 63, 0.5);
+  stroke-width: 1.5;
+  transition: stroke 0.5s ease;
+}
+html.hero-dark .lamp-seams {
+  stroke: rgba(207, 194, 184, 0.22);
+}
+.lamp-fringe {
+  fill: none;
+  stroke: rgba(176, 141, 82, 0.85);
+  stroke-width: 1.7;
+  stroke-linecap: round;
+  transition: stroke 0.5s ease;
+}
+html.hero-dark .lamp-fringe {
+  stroke: rgba(207, 194, 184, 0.35);
+}
+html.hero-dark .lamp-cap {
+  fill: #2e2620;
+  stroke: #cfc2b8;
+}
+
+.lamp-pull-line {
+  stroke: rgba(42, 36, 34, 0.5);
+  stroke-width: 1.8;
+  transition: stroke 0.5s ease;
+}
+.lamp-pull-handle {
+  fill: #c4bab1;
+  stroke: var(--color-ink);
+  stroke-width: 1.3;
+  transition:
+    stroke 0.5s ease,
+    fill 0.5s ease;
+}
+
+/* Dark phase: the lamp is off — pale outlines, faint filament. */
+html.hero-dark .lamp-pull-line {
+  stroke: rgba(240, 231, 226, 0.6);
+}
+html.hero-dark .lamp-pull-handle {
+  fill: #3a322e;
+  stroke: #ece2dc;
+}
+
+/* The lamp's pool of light — only once it's on. */
+.lamp-glow-wrap {
+  opacity: 1;
+  transition: opacity 0.6s ease 0.05s;
+}
+html.hero-dark .lamp-glow-wrap {
+  opacity: 0;
+  transition: opacity 0.3s ease;
+}
+
+/* The pull cord follows the scroll 1:1 in the dark (no transition — it is
+ the visitor's hand); once the light clicks on it springs back up. */
+.hero-pull {
+  translate: 0 0;
+  transition: translate 0.5s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+html.hero-dark .hero-pull {
+  translate: 0 calc(min(var(--syv, 0), 0.5) * 16vh);
+  transition: none;
+}
+
+/* A tiny jolt of the whole lamp when the switch snaps. */
+@keyframes lamp-jolt {
+  0% {
+    rotate: 0deg;
+  }
+  30% {
+    rotate: 1.6deg;
+  }
+  65% {
+    rotate: -1deg;
+  }
+  100% {
+    rotate: 0deg;
+  }
+}
+html:not(.hero-dark) .hero-lamp-svg {
+  animation: lamp-jolt 0.7s ease-in-out;
+  transform-origin: top center;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html:not(.hero-dark) .hero-lamp-svg {
+    animation: none;
+  }
+}
