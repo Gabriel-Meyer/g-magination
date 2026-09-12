@@ -21,10 +21,10 @@ export function Hero() {
     let raf = 0
     const apply = () => {
       raf = 0
-      root.classList.toggle(
-        'hero-dark',
-        window.scrollY / window.innerHeight < LIT_AT,
-      )
+      // Guard the divisor: a zero height would make the ratio NaN, which
+      // compares false and would silently start the hero already lit.
+      const h = window.innerHeight || 1
+      root.classList.toggle('hero-dark', window.scrollY / h < LIT_AT)
     }
     const onScroll = () => {
       if (!raf) raf = requestAnimationFrame(apply)
@@ -44,7 +44,7 @@ export function Hero() {
   // lit hold when dark (so you watch the cord pull on the way), back to the
   // top when lit.
   const toggleSwitch = () => {
-    const h = window.innerHeight
+    const h = window.innerHeight || 1
     const lit = window.scrollY / h >= LIT_AT
     window.scrollTo({ top: lit ? 0 : Math.round(h * 0.72), behavior: 'smooth' })
   }
@@ -237,7 +237,7 @@ function HeroBlueprint() {
   return (
     <div
       aria-hidden="true"
-      className="pointer-events-none absolute left-0 top-[15svh] z-[2] h-[38svh] -translate-x-[18%] sm:h-[46svh]"
+      className="pointer-events-none absolute left-0 top-[8svh] z-[2] h-[27svh] -translate-x-[18%] sm:top-[15svh] sm:h-[46svh] sm:-translate-x-[50%]"
       style={{
         rotate: '-2deg',
         opacity: 'calc(0.5 * (1 - clamp(0, var(--hx, 0) * 1.5, 1)))',
