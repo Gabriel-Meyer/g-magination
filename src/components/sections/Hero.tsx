@@ -240,7 +240,7 @@ function HeroBlueprint() {
       className="pointer-events-none absolute left-0 top-[15svh] z-[2] h-[38svh] -translate-x-[18%] sm:h-[46svh]"
       style={{
         rotate: '-2deg',
-        opacity: 'calc(1 - clamp(0, var(--hx, 0) * 1.5, 1))',
+        opacity: 'calc(0.5 * (1 - clamp(0, var(--hx, 0) * 1.5, 1)))',
       }}
     >
       <svg viewBox="0 0 320 400" className="h-full">
@@ -310,7 +310,7 @@ function WallSwitch({ onToggle }: { onToggle: () => void }) {
       onClick={onToggle}
       data-cursor
       aria-label="flip the light switch"
-      className="pointer-events-auto absolute right-[7%] top-[63%] z-[6] h-20 sm:right-[11%] sm:top-[58%] sm:h-24"
+      className="pointer-events-auto absolute right-[13%] top-[74%] z-[6] h-20 sm:right-[17%] sm:top-[70%] sm:h-24"
       style={{ opacity: 'calc(1 - clamp(0, var(--hx, 0) * 1.5, 1))' }}
     >
       <svg viewBox="0 0 80 120" className="h-full">
