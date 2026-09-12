@@ -832,14 +832,65 @@ html.hero-dark .lamp-glow-wrap {
   transition: opacity 0.3s ease;
 }
 
-/* The pull cord follows the scroll 1:1 in the dark (no transition — it is
- the visitor's hand); once the light clicks on it springs back up. */
-.hero-pull {
-  translate: 0 0;
-  transition: translate 0.5s cubic-bezier(0.34, 1.56, 0.64, 1);
+/* The wall switch. */
+.ws-plate {
+  fill: #f6ede4;
+  stroke: rgba(42, 36, 34, 0.5);
+  stroke-width: 1.6;
+  transition:
+    fill 0.5s ease,
+    stroke 0.5s ease;
 }
-html.hero-dark .hero-pull {
-  translate: 0 calc(min(var(--syv, 0), 0.5) * 16vh);
+.ws-screw {
+  fill: none;
+  stroke: rgba(42, 36, 34, 0.4);
+  stroke-width: 1.2;
+  transition: stroke 0.5s ease;
+}
+.ws-lever rect,
+.ws-lever circle {
+  fill: #e5d7c6;
+  stroke: rgba(42, 36, 34, 0.55);
+  stroke-width: 1.5;
+  transition:
+    fill 0.5s ease,
+    stroke 0.5s ease;
+}
+.ws-pivot {
+  fill: #d9c9b6;
+  stroke: rgba(42, 36, 34, 0.55);
+  stroke-width: 1.5;
+  transition:
+    fill 0.5s ease,
+    stroke 0.5s ease;
+}
+html.hero-dark .ws-plate {
+  fill: #241d18;
+  stroke: #cfc2b8;
+}
+html.hero-dark .ws-screw {
+  stroke: rgba(207, 194, 184, 0.5);
+}
+html.hero-dark .ws-lever rect,
+html.hero-dark .ws-lever circle {
+  fill: #3a322c;
+  stroke: #cfc2b8;
+}
+html.hero-dark .ws-pivot {
+  fill: #322a24;
+  stroke: #cfc2b8;
+}
+
+/* Lever up once the light is on — with a snappy spring. In the dark it
+   hangs down and gets pressed slightly upward as the visitor scrolls. */
+.ws-lever {
+  transform-box: view-box;
+  transform-origin: 50% 45%;
+  rotate: 0deg;
+  transition: rotate 0.4s cubic-bezier(0.34, 1.9, 0.64, 1);
+}
+html.hero-dark .ws-lever {
+  rotate: calc(180deg - min(var(--syv, 0), 0.5) * 50deg);
   transition: none;
 }
 

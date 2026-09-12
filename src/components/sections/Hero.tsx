@@ -89,7 +89,8 @@ export function Hero() {
         <div aria-hidden="true" className="hero-veil" />
 
         <HeroBlueprint />
-        <HeroLamp onToggle={toggleSwitch} />
+        <HeroLamp />
+        <WallSwitch onToggle={toggleSwitch} />
 
         <div
           className="pointer-events-none relative z-10 flex h-full w-full flex-col items-center justify-center px-6 pt-[16svh] text-center"
@@ -160,10 +161,10 @@ const GLOBES_FRONT = [
  * inside the cluster and is clickable — it scroll-toggles the light. Fades
  * with the hero text, a touch earlier (--hx).
  */
-function HeroLamp({ onToggle }: { onToggle: () => void }) {
+function HeroLamp() {
   return (
     <div
-      className="hero-lamp pointer-events-none absolute right-0 top-0 z-[5] h-[52svh] translate-x-1/2 sm:h-[66svh]"
+      className="hero-lamp pointer-events-none absolute right-0 top-0 z-[5] h-[52svh] translate-x-[30%] sm:h-[66svh]"
       style={{
         rotate: 'calc(var(--nx, 0) * 1.2deg)',
         transformOrigin: 'top center',
@@ -184,15 +185,6 @@ function HeroLamp({ onToggle }: { onToggle: () => void }) {
         />
       </div>
 
-      {/* Invisible click target over the pull cord. */}
-      <button
-        type="button"
-        onClick={onToggle}
-        data-cursor
-        aria-label="pull the light switch"
-        className="pointer-events-auto absolute bottom-0 left-[33%] top-[58%] z-10 w-12 -translate-x-1/2"
-      />
-
       <svg
         aria-hidden="true"
         viewBox="0 0 400 620"
@@ -211,25 +203,6 @@ function HeroLamp({ onToggle }: { onToggle: () => void }) {
         </defs>
         {/* Red textile cable, vanishing into the cluster. */}
         <line className="lamp-cord" x1="200" y1="0" x2="200" y2="170" />
-        {/* The pull switch — painted behind the globes, so its long cord
-            disappears into the cluster: no gap at any pull length. */}
-        <g className="hero-pull">
-          <line
-            className="lamp-pull-line"
-            x1="132"
-            y1="200"
-            x2="132"
-            y2="430"
-          />
-          <rect
-            className="lamp-pull-handle"
-            x="127.5"
-            y="430"
-            width="9"
-            height="20"
-            rx="4"
-          />
-        </g>
         {GLOBES_BACK.map((g) => (
           <circle
             key={`${g.cx}-${g.cy}`}
@@ -322,5 +295,44 @@ function HeroBlueprint() {
         </text>
       </svg>
     </div>
+  )
+}
+
+/**
+ * The wall switch. Lever down while dark — scrolling presses it upward a
+ * little (--syv), and when the light clicks on it snaps up with a spring
+ * (.ws-lever in index.css). Clicking scroll-toggles the light.
+ */
+function WallSwitch({ onToggle }: { onToggle: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onToggle}
+      data-cursor
+      aria-label="flip the light switch"
+      className="pointer-events-auto absolute right-[7%] top-[63%] z-[6] h-20 sm:right-[11%] sm:top-[58%] sm:h-24"
+      style={{ opacity: 'calc(1 - clamp(0, var(--hx, 0) * 1.5, 1))' }}
+    >
+      <svg viewBox="0 0 80 120" className="h-full">
+        {/* Plate with its two screws. */}
+        <rect
+          className="ws-plate"
+          x="14"
+          y="12"
+          width="52"
+          height="84"
+          rx="9"
+        />
+        <circle className="ws-screw" cx="40" cy="22" r="2.2" />
+        <circle className="ws-screw" cx="40" cy="86" r="2.2" />
+        {/* Toggle lever — rotation lives in CSS. */}
+        <g className="ws-lever">
+          <rect x="35" y="26" width="10" height="30" rx="4" />
+          <circle cx="40" cy="27" r="4" />
+        </g>
+        {/* Pivot dome. */}
+        <circle className="ws-pivot" cx="40" cy="54" r="7" />
+      </svg>
+    </button>
   )
 }
