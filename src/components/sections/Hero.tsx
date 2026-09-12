@@ -88,6 +88,7 @@ export function Hero() {
         {/* The dark, until someone pulls the switch. */}
         <div aria-hidden="true" className="hero-veil" />
 
+        <HeroBlueprint />
         <HeroLamp onToggle={toggleSwitch} />
 
         <div
@@ -116,8 +117,8 @@ export function Hero() {
             className="hero-sub animate-fade-rise mt-12 max-w-sm text-balance text-sm font-light leading-relaxed sm:text-base"
             style={{ animationDelay: '0.7s' }}
           >
-            a tinkerer in vienna, building cool light pieces out of pure passion.
-            are you curious what comes next?
+            a tinkerer in vienna, building cool light pieces out of pure
+            passion. are you curious what comes next?
           </p>
         </div>
 
@@ -134,12 +135,30 @@ export function Hero() {
   )
 }
 
+/* The bubblegum cluster: back globes first (painted darker), front on top.
+   Cluster center ≈ (200, 258); the cable and pull cord vanish behind it. */
+const GLOBES_BACK = [
+  { cx: 152, cy: 182, r: 40 },
+  { cx: 252, cy: 178, r: 38 },
+  { cx: 300, cy: 242, r: 42 },
+  { cx: 102, cy: 248, r: 40 },
+  { cx: 282, cy: 322, r: 40 },
+  { cx: 126, cy: 322, r: 38 },
+]
+const GLOBES_FRONT = [
+  { cx: 200, cy: 168, r: 46 },
+  { cx: 148, cy: 258, r: 50 },
+  { cx: 256, cy: 254, r: 52 },
+  { cx: 196, cy: 336, r: 50 },
+  { cx: 206, cy: 252, r: 42 },
+]
+
 /**
- * The lamp: a grand old fabric shade — pleated, scallop-trimmed, fringed —
- * hanging on its red cable at the left edge of the screen, only half in
- * frame. The pull switch hangs from the shade's rim and is clickable — it\n * scroll-toggles the light. The lamp fades out with the
- * hero text, a touch earlier (--hx). Colors flip with the dark phase in
- * index.css.
+ * The hero lamp is the bubblegum: a cluster of glass globes on its red cable,
+ * hanging at the right edge, half in frame. Dark: dusty outlines. Lit: the
+ * globes glow vivid orange, like the real thing. The pull switch hangs from
+ * inside the cluster and is clickable — it scroll-toggles the light. Fades
+ * with the hero text, a touch earlier (--hx).
  */
 function HeroLamp({ onToggle }: { onToggle: () => void }) {
   return (
@@ -151,21 +170,21 @@ function HeroLamp({ onToggle }: { onToggle: () => void }) {
         opacity: 'calc(1 - clamp(0, var(--hx, 0) * 1.5, 1))',
       }}
     >
-      {/* The light pooling out from under the shade. */}
+      {/* The light pooling out of the cluster. */}
       <div
         aria-hidden="true"
-        className="lamp-glow-wrap absolute left-1/2 top-[56%] -translate-x-1/2 -translate-y-1/2"
+        className="lamp-glow-wrap absolute left-1/2 top-[41%] -translate-x-1/2 -translate-y-1/2"
       >
         <div
-          className="quiet-breath h-[72vmin] w-[72vmin] rounded-full"
+          className="quiet-breath h-[76vmin] w-[76vmin] rounded-full"
           style={{
             background:
-              'radial-gradient(circle, rgba(255,223,158,0.55) 0%, rgba(247,201,138,0.28) 42%, rgba(247,201,138,0.1) 62%, transparent 75%)',
+              'radial-gradient(circle, rgba(255,166,90,0.5) 0%, rgba(255,150,80,0.26) 42%, rgba(247,180,120,0.1) 62%, transparent 75%)',
           }}
         />
       </div>
 
-      {/* Invisible click target over the pull cord (x≈33% of the shade). */}
+      {/* Invisible click target over the pull cord. */}
       <button
         type="button"
         onClick={onToggle}
@@ -173,76 +192,134 @@ function HeroLamp({ onToggle }: { onToggle: () => void }) {
         aria-label="pull the light switch"
         className="pointer-events-auto absolute bottom-0 left-[33%] top-[58%] z-10 w-12 -translate-x-1/2"
       />
+
       <svg
         aria-hidden="true"
         viewBox="0 0 400 620"
         className="hero-lamp-svg relative h-full"
       >
         <defs>
-          <linearGradient id="shade-grad" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor="#f8ecca" />
-            <stop offset="55%" stopColor="#f2dfae" />
-            <stop offset="100%" stopColor="#e8c98a" />
-          </linearGradient>
+          <radialGradient id="globe-grad" cx="0.42" cy="0.38" r="0.75">
+            <stop offset="0%" stopColor="#ffc27d" />
+            <stop offset="45%" stopColor="#ff9a3f" />
+            <stop offset="100%" stopColor="#f07322" />
+          </radialGradient>
+          <radialGradient id="globe-grad-back" cx="0.45" cy="0.4" r="0.75">
+            <stop offset="0%" stopColor="#f2953c" />
+            <stop offset="100%" stopColor="#d65e1d" />
+          </radialGradient>
         </defs>
-        {/* Red textile cable — long, so the shade hangs below the top bar. */}
-        <line className="lamp-cord" x1="200" y1="0" x2="200" y2="112" />
-        {/* Top cap. */}
-        <rect
-          className="lamp-cap"
-          x="181"
-          y="110"
-          width="38"
-          height="18"
-          rx="5"
-        />
-        {/* The pull switch — painted behind the shade, so the long cord
-            disappears up into the lamp: dragged down by scroll it never
-            shows a gap, and it springs back when the light clicks on. */}
+        {/* Red textile cable, vanishing into the cluster. */}
+        <line className="lamp-cord" x1="200" y1="0" x2="200" y2="170" />
+        {/* The pull switch — painted behind the globes, so its long cord
+            disappears into the cluster: no gap at any pull length. */}
         <g className="hero-pull">
           <line
             className="lamp-pull-line"
             x1="132"
-            y1="172"
+            y1="200"
             x2="132"
-            y2="414"
+            y2="430"
           />
           <rect
             className="lamp-pull-handle"
             x="127.5"
-            y="414"
+            y="430"
             width="9"
             height="20"
             rx="4"
           />
         </g>
-        {/* The shade: bell silhouette with a scalloped hem. */}
-        <path
-          className="lamp-shade"
-          fill="url(#shade-grad)"
-          d="M162 128 L238 128
-             C298 156 338 242 346 322
-             q -18.25 17 -36.5 0 q -18.25 17 -36.5 0 q -18.25 17 -36.5 0 q -18.25 17 -36.5 0
-             q -18.25 17 -36.5 0 q -18.25 17 -36.5 0 q -18.25 17 -36.5 0 q -18.25 17 -36.5 0
-             C 62 242 102 156 162 128 Z"
+        {GLOBES_BACK.map((g) => (
+          <circle
+            key={`${g.cx}-${g.cy}`}
+            className="lamp-globe lamp-globe-back"
+            fill="url(#globe-grad-back)"
+            cx={g.cx}
+            cy={g.cy}
+            r={g.r}
+          />
+        ))}
+        {GLOBES_FRONT.map((g) => (
+          <circle
+            key={`${g.cx}-${g.cy}`}
+            className="lamp-globe"
+            fill="url(#globe-grad)"
+            cx={g.cx}
+            cy={g.cy}
+            r={g.r}
+          />
+        ))}
+      </svg>
+    </div>
+  )
+}
+
+/**
+ * A faint technical sketch of the other lamp (sr01) on the left — thin
+ * construction lines, dashed dimensions, a wink of an annotation. Colors flip
+ * with the dark phase (.bp-*), and it fades out with the lamp (--hx).
+ */
+function HeroBlueprint() {
+  return (
+    <div
+      aria-hidden="true"
+      className="pointer-events-none absolute left-0 top-[15svh] z-[2] h-[38svh] -translate-x-[18%] sm:h-[46svh]"
+      style={{
+        rotate: '-2deg',
+        opacity: 'calc(1 - clamp(0, var(--hx, 0) * 1.5, 1))',
+      }}
+    >
+      <svg viewBox="0 0 320 400" className="h-full">
+        <text className="bp-text" x="24" y="30">
+          sr01 · steel reflector one — sketch
+        </text>
+
+        {/* Front view: steel panel with the plywood body dashed behind. */}
+        <rect className="bp-stroke" x="24" y="66" width="136" height="178" />
+        <rect
+          className="bp-stroke bp-dash"
+          x="38"
+          y="80"
+          width="108"
+          height="150"
         />
-        {/* Pleat seams. */}
+        <text className="bp-text" x="24" y="262">
+          front
+        </text>
+
+        {/* Dimension above. */}
+        <path className="bp-stroke" d="M24 50 h136 M24 45 v10 M160 45 v10" />
+        <text className="bp-text" x="80" y="44">
+          600
+        </text>
+
+        {/* Side view: wall, plywood body, floating panel, the gap. */}
+        <path className="bp-stroke" d="M292 66 V244" />
         <path
-          className="lamp-seams"
-          d="M174 130 C 142 184 104 264 86 326
-             M188 129 C 170 194 148 274 138 330
-             M200 128 V 326
-             M212 129 C 230 194 252 274 262 330
-             M226 130 C 258 184 296 264 314 326"
+          className="bp-stroke"
+          d="M292 74 l10 -8 M292 96 l10 -8 M292 118 l10 -8 M292 140 l10 -8 M292 162 l10 -8 M292 184 l10 -8 M292 206 l10 -8 M292 228 l10 -8"
         />
-        {/* Fringe below the hem. */}
+        <rect className="bp-stroke" x="252" y="92" width="40" height="126" />
+        <rect className="bp-stroke" x="234" y="74" width="10" height="162" />
+        <text className="bp-text" x="238" y="262">
+          side
+        </text>
+
+        {/* The gap, annotated honestly. */}
+        <path className="bp-stroke bp-dash" d="M247 155 H200 V310 H120" />
+        <text className="bp-text" x="24" y="314">
+          ← the glow lives in here
+        </text>
+
+        {/* Stray construction marks. */}
         <path
-          className="lamp-fringe"
-          d="M62 330 v20 M76 334 v24 M90 336 v20 M104 332 v24 M118 336 v21 M132 333 v24
-             M146 337 v20 M160 333 v24 M174 337 v21 M188 334 v24 M202 337 v20 M216 334 v24
-             M230 337 v21 M244 333 v24 M258 337 v20 M272 333 v24 M286 336 v21 M300 332 v24
-             M314 336 v20 M328 333 v22 M340 329 v20"
+          className="bp-stroke"
+          d="M190 40 h10 M195 35 v10 M40 350 h10 M45 345 v10"
         />
+        <text className="bp-text" x="190" y="368">
+          scale: good enough
+        </text>
       </svg>
     </div>
   )

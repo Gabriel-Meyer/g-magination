@@ -778,71 +778,48 @@ html.hero-dark .qc-tip {
   stroke: #a84b40;
   stroke-width: 3.5;
 }
-.lamp-cap {
-  fill: #b08d52;
-  stroke: #8a6d3f;
-  stroke-width: 1.6;
+.lamp-globe {
+  stroke: rgba(146, 66, 10, 0.35);
+  stroke-width: 1.4;
   transition:
-    fill 0.5s ease,
+    fill 0.45s ease,
     stroke 0.5s ease;
 }
-.lamp-shade {
-  stroke: #8a6d3f;
-  stroke-width: 2;
-  stroke-linejoin: round;
-  transition: stroke 0.5s ease;
+html.hero-dark .lamp-globe {
+  fill: #261e18;
+  stroke: #d8cbc2;
+  stroke-width: 1.3;
 }
-/* Dark: CSS fill overrides the gradient presentation attribute. */
-html.hero-dark .lamp-shade {
-  fill: #241d18;
-  stroke: #cfc2b8;
-  stroke-width: 1.8;
+html.hero-dark .lamp-globe-back {
+  fill: #1f1813;
+  stroke: rgba(216, 203, 194, 0.5);
 }
-.lamp-seams {
+
+/* The technical sketch of sr01. */
+.bp-stroke {
   fill: none;
-  stroke: rgba(138, 109, 63, 0.5);
-  stroke-width: 1.5;
-  transition: stroke 0.5s ease;
-}
-html.hero-dark .lamp-seams {
-  stroke: rgba(207, 194, 184, 0.22);
-}
-.lamp-fringe {
-  fill: none;
-  stroke: rgba(176, 141, 82, 0.85);
-  stroke-width: 1.7;
+  stroke: rgba(42, 36, 34, 0.28);
+  stroke-width: 1.2;
   stroke-linecap: round;
   transition: stroke 0.5s ease;
 }
-html.hero-dark .lamp-fringe {
-  stroke: rgba(207, 194, 184, 0.35);
+.bp-dash {
+  stroke-dasharray: 5 5;
 }
-html.hero-dark .lamp-cap {
-  fill: #2e2620;
-  stroke: #cfc2b8;
+.bp-text {
+  fill: rgba(42, 36, 34, 0.4);
+  font-family: var(--font-grotesk);
+  font-size: 11px;
+  font-weight: 400;
+  letter-spacing: 0.08em;
+  text-transform: lowercase;
+  transition: fill 0.5s ease;
 }
-
-.lamp-pull-line {
-  stroke: rgba(42, 36, 34, 0.5);
-  stroke-width: 1.8;
-  transition: stroke 0.5s ease;
+html.hero-dark .bp-stroke {
+  stroke: rgba(236, 226, 220, 0.3);
 }
-.lamp-pull-handle {
-  fill: #c4bab1;
-  stroke: var(--color-ink);
-  stroke-width: 1.3;
-  transition:
-    stroke 0.5s ease,
-    fill 0.5s ease;
-}
-
-/* Dark phase: the lamp is off — pale outlines, faint filament. */
-html.hero-dark .lamp-pull-line {
-  stroke: rgba(240, 231, 226, 0.6);
-}
-html.hero-dark .lamp-pull-handle {
-  fill: #3a322e;
-  stroke: #ece2dc;
+html.hero-dark .bp-text {
+  fill: rgba(236, 226, 220, 0.45);
 }
 
 /* The lamp's pool of light — only once it's on. */
