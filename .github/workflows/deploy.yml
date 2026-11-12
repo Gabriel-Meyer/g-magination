@@ -22,16 +22,25 @@ jobs:
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version-file: .nvmrc
-          cache: pnpm
-      - run: pnpm install --frozen-lockfile
-      - run: pnpm build
+
+      # The site is plain static files at the repository root: one page, its
+      # stylesheet and two scripts, and the media it loads. The archived old
+      # site (archive/) is not part of the deployment.
+      - name: assemble _site
+        run: |
+          set -euo pipefail
+          mkdir -p _site
+          cp index.html rooms.css rooms.js rooms3d.js _site/
+          cp CNAME _site/
+          cp favicon.svg _site/ 2>/dev/null || true
+          cp -R media _site/
+          find _site -name '.DS_Store' -delete
+          du -sh _site
+          find _site -maxdepth 2 | sort | head -40
+
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:
-          path: dist
+          path: _site
       - id: deployment
         uses: actions/deploy-pages@v4
