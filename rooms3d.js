@@ -261,11 +261,13 @@
       o.freeX = G.W / 2;
       o.freeW = G.W;
       o.pb = [];
+      o.far = {}; /* a beat's extra track, in screens, where its move is a long one (rooms-build.mjs, "THE PHONE'S PACE") */
       var H = G.H;
       [].forEach.call(sec.querySelectorAll(".walk [data-pbeat]"), function (b) {
         var t = docTop(b), nm = b.getAttribute("data-pbeat");
         o.beats[nm] = [t, t + b.offsetHeight];
         o.bm[nm] = b.offsetHeight;
+        o.far[nm] = +b.getAttribute("data-far") || 0;
         o.pb.push({ name: nm, label: b.getAttribute("data-label") || "", line: b.getAttribute("data-line") || "", s: t - 0.15 * H });
       });
       var tail = sec.querySelector(".walk__tail");
@@ -6371,7 +6373,9 @@
       }
       if (!b) continue;
       var s = m.second ? b[0] + 0.62 * (b[1] - b[0]) - 0.45 * H : b[0] - 0.08 * H;
-      var e = s + (m.second ? 0.45 : 0.5) * H;
+      /* (a long way to go: the beat is that much taller and the move takes
+         that much longer, so it is a walk and not a lunge) */
+      var e = s + ((m.second ? 0.45 : 0.5) + ((!m.second && g.far && g.far[m.beat]) || 0)) * H;
       if (m.from === "arrive") s = early(s, P0.moves, g, m.hold);
       P0.moves.push({ v: m.v, s: s, e: e, via: m.via });
       if (m.act) P0.act = { r0: e, r1: e + 0.26 * H, f0: b[1] - 0.42 * H, f1: b[1] - 0.1 * H };

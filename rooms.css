@@ -1612,24 +1612,32 @@ html[data-motion="reduced"] .hud {
     pointer-events: none;
   }
 
+  /* (--far: extra track, in screens, where the camera has a long way to go
+     on a phone; worked out from views.json by rooms-build.mjs, "THE PHONE'S
+     PACE". A beat's move then takes that much longer: planPhone, data-far) */
   html.gl .walk__b {
-    height: calc(var(--vh) * 0.9);
+    height: calc(var(--vh) * (0.9 + var(--far, 0)));
   }
 
   html.gl .walk__b--knot {
-    height: calc(var(--vh) * 1.25);
+    height: calc(var(--vh) * (1.25 + var(--far, 0)));
   }
 
   html.gl .walk__b--apart {
-    height: calc(var(--vh) * 1.35);
+    height: calc(var(--vh) * (1.35 + var(--far, 0)));
   }
 
   html.gl .walk__b--filament {
-    height: calc(var(--vh) * 1.4);
+    height: calc(var(--vh) * (1.4 + var(--far, 0)));
   }
 
   html.gl .work--short .walk__b {
-    height: var(--vh);
+    height: calc(var(--vh) * (1 + var(--far, 0)));
+  }
+
+  /* (the chair's walk round it: its extra track, ahead of the tail) */
+  html.gl .walk__gap {
+    height: calc(var(--vh) * var(--far, 0));
   }
 
   html.gl .walk__tail {
@@ -1641,7 +1649,7 @@ html[data-motion="reduced"] .hud {
      notes/phone-load.md, "Bare wall". The walk out to the end turns
      round and keeps its length.) */
   html.gl .pass {
-    height: calc(var(--vh) * 0.05);
+    height: calc(var(--vh) * (0.05 + var(--far, 0)));
   }
 
   html.gl .pass--out {
@@ -1649,7 +1657,7 @@ html[data-motion="reduced"] .hud {
   }
 
   html.gl .pass--short {
-    height: 0;
+    height: calc(var(--vh) * var(--far, 0));
   }
 
   /* --- the closing: the view back down the room on its own, then the card
