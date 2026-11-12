@@ -1904,6 +1904,47 @@
     if (ceilQ >= 2.6 && ceilQ <= 9) ROOMT.ceil = ceilQ;
     CEIL = ROOMT.ceil;
   }
+  /* THE ROOM CLOSED (notes/room-back.md). The artist: the back of the room
+     "wirkt wie kein realer raum": a smaller, real room. A BACK WALL facing
+     the art wall (d m out), a START WALL just behind the first view with
+     the door the visitor came in by (dark beyond), an END WALL a few metres
+     past the end of the walk. Floor, ceiling, skirting and the art wall end
+     at them. The new walls are the art wall's paint and plaster; nothing
+     hangs on them and no spot is aimed at them: they have the room's own
+     soft light and, faintly, what the works throw that far (far: [x, y, z],
+     colour, strength (linear, square on at d), as LEVEL's bounce, and like
+     it x bounceK: less at the dark entrance). ?back=off:
+     the open room exactly as before; ?depth=<m> (6..16) tries another depth
+     (then every camera position is kept 0.6 m off the back wall). Live as
+     window.__rooms.back (far / corner: edit, then __rooms.roomApply()). */
+  var RB = null;
+  if (ROOMT && Q.get("back") !== "off") {
+    RB = {
+      xs: -15, /* the start wall's face (the phone's first view stands at x = -13) */
+      xe: 78, /* the end wall's face (the walk ends at x = 71) */
+      d: 12, /* the back wall's face, metres from the art wall */
+      t: 0.3, /* how thick the walls are: the door's reveal */
+      door: { z: 3.0, w: 1.6, h: 2.75 }, /* its middle (z), its clear width and height */
+      keep: 0.5, /* no camera position nearer than this to any wall */
+      corner: { k: 0.3, r: 0.4 }, /* the soft dark where two walls meet (the art wall's foot has 0.5 / 0.18) */
+      far: [
+        [[X.pen, 0.9, 0.45], 0xff5a1a, 0.05], /* the pen */
+        [[X.cl, 1.72, 1.15], 0xffa060, 0.06], /* Bubblegum's globes */
+        [[X.bx, 1.4, 0.5], 0xffb070, 0.04], /* the Light Box */
+        [[X.gf, 0.95, 1.05], 0xff00ff, 0.05] /* the Glass Ball's torch (its colour follows the torch's) */
+      ]
+    };
+    var depthQ = parseFloat(Q.get("depth"));
+    if (depthQ >= 6 && depthQ <= 16) {
+      RB.d = depthQ;
+      RB.keep = 0.6;
+    }
+    RB.xc = (RB.xs + RB.xe) / 2;
+    RB.len = RB.xe - RB.xs;
+  }
+  /* the depth the camera keeps inside of (its guard): the back wall, or the
+     open room's 16 m as before */
+  var ROOM_IN = RB ? RB.d - RB.keep : ROOM_D - 0.3;
   var RT_CL = null; /* Bubblegum's ceiling light in the test room */
   var RTU = null; /* the test room's uniforms, shared by wall, floor, ceiling and their patches */
   function roomApply() {
@@ -1914,6 +1955,30 @@
       for (i = 0; i < 10; i++) {
         RTU.uBP.value.push(new THREE.Vector4(0, -99, 0, 1));
         RTU.uBC.value.push(new THREE.Color(0, 0, 0));
+      }
+      if (RB) {
+        RTU.uRB = { value: new THREE.Vector4() };
+        RTU.uRB2 = { value: new THREE.Vector4() };
+        RTU.uFP = { value: [] };
+        RTU.uFC = { value: [] };
+        for (i = 0; i < 4; i++) {
+          RTU.uFP.value.push(new THREE.Vector4());
+          RTU.uFC.value.push(new THREE.Color(0, 0, 0));
+        }
+      }
+    }
+    if (RB) {
+      /* the new walls' faces, and the soft dark in the corners they make */
+      RTU.uRB.value.set(RB.xs, RB.xe, RB.d, 0);
+      RTU.uRB2.value.set(RB.corner.k, RB.corner.r, 0, 0);
+      for (i = 0; i < 4; i++) {
+        var fq = RB.far[i];
+        if (!fq) {
+          RTU.uFC.value[i].setRGB(0, 0, 0);
+          continue;
+        }
+        RTU.uFP.value[i].set(fq[0][0], fq[0][1], fq[0][2], Math.max(1, RB.d - fq[0][2]));
+        if (i !== 3 || !RB.gfLive) RTU.uFC.value[i].setHex(fq[1]).multiplyScalar(fq[2]);
       }
     }
     RTU.uRT.value.set(R.mottle, R.wave, R.ao.floor, R.ao.ceil);
@@ -1934,6 +1999,7 @@
       skirtMat.color.setHex(R.skirt);
       floorMat.roughness = R.floorRough;
       wallMat.bumpScale = 0.55 * R.bump;
+      if (RB && RB.mat) RB.mat.bumpScale = wallMat.bumpScale;
       levelNow = -1; /* roomLevel() lays the level again */
     }
     if (typeof invalidate === "function") invalidate();
@@ -1954,6 +2020,10 @@
       sh.vertexShader = sh.vertexShader
         .replace("#include <common>", "#include <common>\nvarying vec3 vRW;")
         .replace("#include <project_vertex>", "#include <project_vertex>\nvRW = (modelMatrix * vec4(transformed, 1.0)).xyz;");
+      if (RB)
+        sh.vertexShader = sh.vertexShader
+          .replace("#include <common>", "#include <common>\nvarying vec3 vRN;")
+          .replace("#include <project_vertex>", "#include <project_vertex>\nvRN = normalize(mat3(modelMatrix) * objectNormal);");
       var bp = THREE.ShaderChunk.bumpmap_pars_fragment
         .replace("uniform float bumpScale;", "uniform float bumpScale;\nfloat rtBump(vec2 u) { return 0.5 * (texture2D(bumpMap, u).x + texture2D(bumpMap, u * 0.383 + vec2(0.37, 0.11)).x); }")
         .replace(/texture2D\( bumpMap, ([^)]*)\)\.x/g, "rtBump( $1 )");
@@ -1965,8 +2035,12 @@
           "float rtN(vec2 p) { vec2 i = floor(p), f = fract(p); f = f * f * (3.0 - 2.0 * f);",
           " return mix(mix(rtH(i), rtH(i + vec2(1.0, 0.0)), f.x), mix(rtH(i + vec2(0.0, 1.0)), rtH(i + vec2(1.0, 1.0)), f.x), f.y); }",
           "float rtF(vec2 p) { return 0.5 * rtN(p) + 0.3 * rtN(p * 2.13 + 7.1) + 0.2 * rtN(p * 4.7 + 3.3); }",
+          RB ? "varying vec3 vRN;\nuniform vec4 uRB;\nuniform vec4 uRB2;\nuniform vec4 uFP[4];\nuniform vec3 uFC[4];\n" +
+            "float rtC(float d, float k, float r) { return d < -0.01 ? 1.0 : 1.0 - k * exp(-max(d, 0.0) / r); }" : "",
           "vec2 rtP() {",
-          "#if RT_KIND == 0",
+          "#if RT_KIND == 4",
+          " return abs(vRN.x) > 0.5 ? vRW.zy : abs(vRN.y) > 0.5 ? vRW.xz : vRW.xy;",
+          "#elif RT_KIND == 0",
           " return vRW.xy;",
           "#else",
           " return vRW.xz;",
@@ -1994,12 +2068,18 @@
           "  vec2 g = vec2(hx - h0, hy - h0) / e;",
           "  vec3 tX = normalize((viewMatrix * vec4(1.0, 0.0, 0.0, 0.0)).xyz), tY = normalize((viewMatrix * vec4(0.0, 1.0, 0.0, 0.0)).xyz);",
           "  normal = normalize(normal - uRT.y * (g.x * tX + g.y * tY)); }",
+          "#elif RT_KIND == 4",
+          "if (abs(vRN.y) < 0.5) { bool rtE = abs(vRN.x) > 0.5; vec2 p = (rtE ? vRW.zy : vRW.xy) * 0.8; float e = 0.04;",
+          "  float h0 = rtF(p), hx = rtF(p + vec2(e, 0.0)), hy = rtF(p + vec2(0.0, e));",
+          "  vec2 g = vec2(hx - h0, hy - h0) / e;",
+          "  vec3 tX = normalize((viewMatrix * vec4(rtE ? vec3(0.0, 0.0, 1.0) : vec3(1.0, 0.0, 0.0), 0.0)).xyz), tY = normalize((viewMatrix * vec4(0.0, 1.0, 0.0, 0.0)).xyz);",
+          "  normal = normalize(normal - uRT.y * (g.x * tX + g.y * tY)); }",
           "#endif"
         ].join("\n"))
         .replace("#include <lights_fragment_end>", [
           "#include <lights_fragment_end>",
           "{ float ao = 1.0;",
-          "#if RT_KIND == 0",
+          "#if RT_KIND == 0 || RT_KIND == 4",
           "  ao *= 1.0 - uRT.z * exp(-max(vRW.y, 0.0) / uRT2.x);",
           "  ao *= 1.0 - uRT.w * exp(-max(uRT2.z - vRW.y, 0.0) / uRT2.y);",
           "#elif RT_KIND == 1",
@@ -2007,6 +2087,20 @@
           "#elif RT_KIND == 2",
           "  ao *= 1.0 - uRT.w * exp(-max(vRW.z, 0.0) / uRT2.y);",
           "#endif",
+          /* the closed room's corners: where a floor, a ceiling or a wall
+             meets a new wall, as where they meet the art wall */
+          RB ? [
+            "#if RT_KIND == 0",
+            "  ao *= rtC(vRW.x - uRB.x, uRB2.x, uRB2.y) * rtC(uRB.y - vRW.x, uRB2.x, uRB2.y);",
+            "#elif RT_KIND == 4",
+            "  if (abs(vRN.z) > 0.5) ao *= rtC(vRW.x - uRB.x, uRB2.x, uRB2.y) * rtC(uRB.y - vRW.x, uRB2.x, uRB2.y);",
+            "  if (abs(vRN.x) > 0.5) ao *= rtC(vRW.z, uRB2.x, uRB2.y) * rtC(uRB.z - vRW.z, uRB2.x, uRB2.y);",
+            "#elif RT_KIND == 1",
+            "  ao *= rtC(uRB.z - vRW.z, uRT.z, uRT2.x) * rtC(vRW.x - uRB.x, uRT.z, uRT2.x) * rtC(uRB.y - vRW.x, uRT.z, uRT2.x);",
+            "#elif RT_KIND == 2",
+            "  ao *= rtC(uRB.z - vRW.z, uRT.w, uRT2.y) * rtC(vRW.x - uRB.x, uRT.w, uRT2.y) * rtC(uRB.y - vRW.x, uRT.w, uRT2.y);",
+            "#endif"
+          ].join("\n") : "",
           "  { float gq = (vRW.x - uRT3.w) / uRT3.z; reflectedLight.indirectDiffuse *= 1.0 - uRT3.y * exp(-0.5 * gq * gq); }",
           "  reflectedLight.indirectDiffuse *= ao;",
           "  reflectedLight.directDiffuse *= mix(1.0, ao, 0.4);",
@@ -2015,6 +2109,15 @@
           "  for (int i = 0; i < 10; i++) { vec3 d = uBP[i].xyz - vRW; rb += uBC[i] / (1.0 + dot(d, d) / (uBP[i].w * uBP[i].w)); }",
           "  reflectedLight.indirectDiffuse += rb * uRT2.w * ao * BRDF_Lambert(material.diffuseColor);",
           "#endif",
+          /* the new walls: what the works throw that far, faintly */
+          RB ? [
+            "#if RT_KIND == 4",
+            "  vec3 rf = vec3(0.0);",
+            "  for (int i = 0; i < 4; i++) { vec3 d = uFP[i].xyz - vRW; float r2 = max(dot(d, d), 0.01);",
+            "    rf += uFC[i] * (uFP[i].w * uFP[i].w / r2) * max(dot(vRN, d) * inversesqrt(r2), 0.0); }",
+            "  reflectedLight.indirectDiffuse += rf * uRT2.w * ao * BRDF_Lambert(material.diffuseColor);",
+            "#endif"
+          ].join("\n") : "",
           "}"
         ].join("\n"));
     };
@@ -2064,8 +2167,11 @@
   function wallGeometry() {
     var L = X0 - WALL_L / 2, R = L + WALL_L, xs = [], ys = [0, CEIL], x, i, j;
     var hole = !!by.bs, hx0 = X.bs - WIN.w / 2, hx1 = X.bs + WIN.w / 2;
-    for (x = L; x < R - 0.01; x += 4) xs.push(x);
-    xs.push(R);
+    /* (the closed room: from the start wall to the end wall; the plaster
+       stays in register, its coordinates are still the 176 m wall's) */
+    var gx0 = RB ? RB.xs : L, gx1 = RB ? RB.xe : R;
+    for (x = gx0; x < gx1 - 0.01; x += 4) xs.push(x);
+    xs.push(gx1);
     if (hole) {
       xs.push(hx0, hx1);
       ys = [0, WIN.y0, WIN.y1, CEIL];
@@ -2095,6 +2201,139 @@
     g.setAttribute("uv", new THREE.Float32BufferAttribute(uv, 2));
     g.setIndex(idx);
     return g;
+  }
+
+  /* ---- the closed room (RB): its surfaces, laid as grids of panels (as the
+     art wall is) so the plaster's coordinates interpolate finely, and kept
+     in register with the open room's (the 176 m wall's u, the 16 m floor's
+     v), so the plaster and concrete are the same wherever both exist ---- */
+  function rbSteps(a, b, step, extra) {
+    var r = [], v;
+    for (v = a; v < b - 0.01; v += step) r.push(v);
+    r.push(b);
+    (extra || []).forEach(function (e) {
+      if (e > a + 1e-6 && e < b - 1e-6) r.push(e);
+    });
+    r.sort(function (p, q) {
+      return p - q;
+    });
+    return r.filter(function (v, k) {
+      return !k || v - r[k - 1] > 1e-6;
+    });
+  }
+  /* a grid from o along U (us, metres) and V (vs), facing n; skip(u, v):
+     leave that cell open */
+  function rbGrid(G, o, U, V, n, us, vs, uvf, skip) {
+    var base = G.pos.length / 3, nu = us.length, i, j, c, p = [0, 0, 0];
+    for (j = 0; j < vs.length; j++)
+      for (i = 0; i < nu; i++) {
+        for (c = 0; c < 3; c++) p[c] = o[c] + U[c] * us[i] + V[c] * vs[j];
+        G.pos.push(p[0], p[1], p[2]);
+        G.nrm.push(n[0], n[1], n[2]);
+        var t = uvf(p);
+        G.uv.push(t[0], t[1]);
+      }
+    var flip = (U[1] * V[2] - U[2] * V[1]) * n[0] + (U[2] * V[0] - U[0] * V[2]) * n[1] + (U[0] * V[1] - U[1] * V[0]) * n[2] < 0;
+    for (j = 0; j < vs.length - 1; j++)
+      for (i = 0; i < nu - 1; i++) {
+        if (skip && skip((us[i] + us[i + 1]) / 2, (vs[j] + vs[j + 1]) / 2)) continue;
+        var a = base + j * nu + i, b = a + 1, cc = a + nu + 1, d = a + nu;
+        if (flip) G.idx.push(a, cc, b, a, d, cc);
+        else G.idx.push(a, b, cc, a, cc, d);
+      }
+  }
+  function rbGeo(G) {
+    var g = new THREE.BufferGeometry();
+    g.setAttribute("position", new THREE.Float32BufferAttribute(G.pos, 3));
+    g.setAttribute("normal", new THREE.Float32BufferAttribute(G.nrm, 3));
+    g.setAttribute("uv", new THREE.Float32BufferAttribute(G.uv, 2));
+    g.setIndex(G.idx);
+    return g;
+  }
+  var RB_LW = X0 - WALL_L / 2;
+  function rbUx(p) {
+    return [(p[0] - RB_LW) / WALL_L, p[1] / CEIL];
+  }
+  function rbUz(p) {
+    return [(p[2] + 17.3) / WALL_L, p[1] / CEIL];
+  }
+  /* the floor (y = 0, with the door's threshold) or the ceiling (y = CEIL),
+     from the start wall to the end wall and out to the back wall */
+  function rbFloor(y) {
+    var G = { pos: [], nrm: [], uv: [], idx: [] }, up = y < 0.01, dr = RB.door;
+    var uvf = function (p) {
+      return [(p[0] - RB_LW) / WALL_L, up ? 1 - p[2] / ROOM_D : p[2] / ROOM_D];
+    };
+    rbGrid(G, [RB.xs, y, 0], [1, 0, 0], [0, 0, 1], [0, up ? 1 : -1, 0], rbSteps(0, RB.len, 4), rbSteps(0, RB.d, 4), uvf);
+    if (up) rbGrid(G, [RB.xs - RB.t, 0, dr.z - dr.w / 2], [1, 0, 0], [0, 0, 1], [0, 1, 0], [0, RB.t], [0, dr.w], uvf);
+    return rbGeo(G);
+  }
+  /* one skirting round the room (the art wall's runs the whole room; the
+     others stop at it and at the door's jambs), as one piece */
+  function rbSkirting() {
+    var H = 0.075, T = 0.014, z0 = RB.door.z - RB.door.w / 2, z1 = RB.door.z + RB.door.w / 2, parts = [];
+    function run(x0, x1, za, zb) {
+      var b = new THREE.BoxGeometry(x1 - x0, H, zb - za);
+      b.translate((x0 + x1) / 2, H / 2, (za + zb) / 2);
+      parts.push(b);
+    }
+    run(RB.xs, RB.xe, 0, T);
+    run(RB.xs, RB.xe, RB.d - T, RB.d);
+    run(RB.xe - T, RB.xe, T, RB.d - T);
+    run(RB.xs, RB.xs + T, T, z0);
+    run(RB.xs, RB.xs + T, z1, RB.d - T);
+    var G = { pos: [], nrm: [], uv: [], idx: [] };
+    parts.forEach(function (b) {
+      var base = G.pos.length / 3;
+      G.pos.push.apply(G.pos, b.attributes.position.array);
+      G.nrm.push.apply(G.nrm, b.attributes.normal.array);
+      G.uv.push.apply(G.uv, b.attributes.uv.array);
+      b.index.array.forEach(function (k) {
+        G.idx.push(base + k);
+      });
+      b.dispose();
+    });
+    return rbGeo(G);
+  }
+  /* the three new walls and the door's reveal: one mesh in the art wall's
+     paint and plaster (its colour is the art wall's own colour object, so
+     roomLevel() carries both); beyond the door, dark */
+  function rbWalls() {
+    var m = new THREE.MeshStandardMaterial({
+      color: 0x9b9289, roughness: 0.93, metalness: 0, envMapIntensity: 0,
+      map: wallMat.map, bumpMap: wallMat.bumpMap, bumpScale: wallMat.bumpScale
+    });
+    m.color = wallMat.color;
+    RB.mat = m;
+    roomMod(m, 4);
+    var G = { pos: [], nrm: [], uv: [], idx: [] }, dr = RB.door, z0 = dr.z - dr.w / 2, z1 = dr.z + dr.w / 2, t = RB.t;
+    var ys = rbSteps(0, CEIL, 4, [dr.h]);
+    /* the back wall */
+    rbGrid(G, [RB.xs, 0, RB.d], [1, 0, 0], [0, 1, 0], [0, 0, -1], rbSteps(0, RB.len, 4), ys, rbUx);
+    /* the end wall */
+    rbGrid(G, [RB.xe, 0, 0], [0, 0, 1], [0, 1, 0], [-1, 0, 0], rbSteps(0, RB.d, 4), ys, rbUz);
+    /* the start wall, with the door */
+    rbGrid(G, [RB.xs, 0, 0], [0, 0, 1], [0, 1, 0], [1, 0, 0], rbSteps(0, RB.d, 4, [z0, z1]), ys, rbUz, function (u, v) {
+      return u > z0 && u < z1 && v < dr.h;
+    });
+    /* the reveal: two jambs and the head, the wall's thickness deep */
+    rbGrid(G, [RB.xs - t, 0, z0], [1, 0, 0], [0, 1, 0], [0, 0, 1], [0, t], [0, dr.h], rbUx);
+    rbGrid(G, [RB.xs - t, 0, z1], [1, 0, 0], [0, 1, 0], [0, 0, -1], [0, t], [0, dr.h], rbUx);
+    rbGrid(G, [RB.xs - t, dr.h, z0], [1, 0, 0], [0, 0, 1], [0, -1, 0], [0, t], [0, dr.w], function (p) {
+      return [(p[0] - RB_LW) / WALL_L, p[2] / CEIL];
+    });
+    var walls = new THREE.Mesh(rbGeo(G), m);
+    walls.matrixAutoUpdate = false;
+    scene.add(walls);
+    /* beyond the door: nothing lit. A box seen from inside, black (the
+       room's haze still lies over it from afar, as over the wall round it),
+       larger than anything the opening can show */
+    var vb = new THREE.BoxGeometry(4, CEIL + 0.2, dr.w + 6);
+    vb.translate(RB.xs - t - 2, (CEIL + 0.2) / 2 - 0.1, dr.z);
+    var vm = new THREE.MeshBasicMaterial({ color: 0x000000, side: THREE.BackSide });
+    var vo = new THREE.Mesh(vb, vm);
+    vo.matrixAutoUpdate = false;
+    scene.add(vo);
   }
 
   function buildRoom() {
@@ -2148,23 +2387,27 @@
       color: 0x2e2925, roughness: 0.62, metalness: 0, envMapIntensity: 0,
       roughnessMap: conc, bumpMap: conc, bumpScale: 0.25
     });
-    var floor = new THREE.Mesh(new THREE.PlaneGeometry(WALL_L, ROOM_D, 44, 4), floorMat);
-    floor.rotation.x = -Math.PI / 2;
-    floor.position.set(X0, 0, ROOM_D / 2);
+    var floor = new THREE.Mesh(RB ? rbFloor(0) : new THREE.PlaneGeometry(WALL_L, ROOM_D, 44, 4), floorMat);
+    if (!RB) {
+      floor.rotation.x = -Math.PI / 2;
+      floor.position.set(X0, 0, ROOM_D / 2);
+    }
     scene.add(floor);
 
     ceilMat = new THREE.MeshStandardMaterial({
       color: 0x7d766e, roughness: 0.96, metalness: 0, envMapIntensity: 0
     });
-    var ceil = new THREE.Mesh(new THREE.PlaneGeometry(WALL_L, ROOM_D, 44, 4), ceilMat);
-    ceil.rotation.x = Math.PI / 2;
-    ceil.position.set(X0, CEIL, ROOM_D / 2);
+    var ceil = new THREE.Mesh(RB ? rbFloor(CEIL) : new THREE.PlaneGeometry(WALL_L, ROOM_D, 44, 4), ceilMat);
+    if (!RB) {
+      ceil.rotation.x = Math.PI / 2;
+      ceil.position.set(X0, CEIL, ROOM_D / 2);
+    }
     scene.add(ceil);
 
     /* a skirting board: one line that tells you where wall meets floor */
     skirtMat = new THREE.MeshStandardMaterial({ color: 0x8a8279, roughness: 0.7, envMapIntensity: 0 });
-    var skirt = new THREE.Mesh(new THREE.BoxGeometry(WALL_L, 0.075, 0.014), skirtMat);
-    skirt.position.set(X0, 0.0375, 0.007);
+    var skirt = new THREE.Mesh(RB ? rbSkirting() : new THREE.BoxGeometry(WALL_L, 0.075, 0.014), skirtMat);
+    if (!RB) skirt.position.set(X0, 0.0375, 0.007);
     scene.add(skirt);
 
     /* THE ROOM LIGHT. Soft, neutral-warm, from everywhere: a hemisphere (no
@@ -2181,6 +2424,7 @@
     roomSoft.position.set(-0.45, 0.8, 1);
     scene.add(roomSoft);
     if (ROOMT) roomPale(); /* (after the lights: it sets their colour) */
+    if (RB) rbWalls();
   }
 
   /* k = 0: the entrance, exactly as dark as it always was. k = 1: the room.
@@ -5945,6 +6189,7 @@
     var M4 = new THREE.Matrix4(), col = new THREE.Color(), d = V3(0, 0, 0), a = V3(0, 0, 0), b = V3(0, 0, 0), hit = V3(0, 0, 0), o = V3(0, 0, 0);
     var ta = V3(0, 0, 0), tb = V3(0, 0, 0), bL = V3(0, 0, 0), pI = V3(0, 0, 0), nf = V3(0, 0, 0), q1 = V3(0, 0, 0), q2 = V3(0, 0, 0);
     var dv = V3(0, 0, 0), oG = V3(0, 0, 0), oR = V3(0, 0, 0), oB = V3(0, 0, 0), qi = new THREE.Quaternion(), NB = new Float64Array(4);
+    var NBW = V3(0, 0, -1), NEW = V3(-1, 0, 0), NSW = V3(1, 0, 0); /* the closed room's walls (RB) */
     var NW = V3(0, 0, 1), NC = V3(0, -1, 0), NF = V3(0, 1, 0), last = null, coneT = cone.material.uniforms.uT;
     var bW = V3(0, 0, 0), ETA = [1.511, 1.522, 1.537]; /* red, green, blue: a dense glass, its spread a little generous */
     var GF_ELONG = 3.2, GF_SPIN = 0.045, GF_HUE = 45; /* the longest a shard is drawn out; the ball's own turn, rad/s */
@@ -6049,6 +6294,21 @@
           n = NC;
         }
       }
+      /* the closed room: the back wall and the end walls stop what reaches them */
+      if (RB && d.z > 1e-3) {
+        tt = (RB.d - 0.006 - o.z) / d.z;
+        if (tt < t) {
+          t = tt;
+          n = NBW;
+        }
+      }
+      if (RB && Math.abs(d.x) > 1e-3) {
+        tt = ((d.x > 0 ? RB.xe - 0.006 : RB.xs + 0.006) - o.x) / d.x;
+        if (tt < t) {
+          t = tt;
+          n = d.x > 0 ? NEW : NSW;
+        }
+      }
       if (d.y < -1e-3) {
         /* the plinth's top first: what leaves the ball downward lands there
            if it is over it */
@@ -6125,6 +6385,7 @@
       torchColour(hue || 0, colU.value);
       lensMat.color.copy(colU.value).multiplyScalar(2.2).addScalar(0.25);
       S.uCol.value.copy(colU.value).multiplyScalar(washK);
+      if (RB && RTU && RTU.uFC) { RB.gfLive = true; RTU.uFC.value[3].copy(colU.value).multiplyScalar(RB.far[3][2]); } /* the closed room: the torch's colour, faintly, on the far walls */
       coneT.value = GF.t;
       /* the ball's own turn (motion on) is slower than the station's clock
          gives it, GF_SPIN; with motion off the Colour control turns it too,
@@ -6650,6 +6911,7 @@
     var bzs = Math.max(0.3, vA.z + vB.z);
     var m = Math.max(0.18 * Math.abs(dx), (need - (pa.z + pb.z) / 2) * (8 / 3) / bzs);
     var c1x = pa.x + vA.x * m, c2x = pb.x + vB.x * m;
+    var NS, i, u, w0, w1, w2, w3, x, y, z, px, py, pz, L;
     c1x = pa.x + sg * clamp((c1x - pa.x) * sg, SKEW * Math.abs(dx), 0.45 * Math.abs(dx));
     c2x = pb.x - sg * clamp((pb.x - c2x) * sg, SKEW * Math.abs(dx), 0.45 * Math.abs(dx));
     /* THE ROOM'S GUARD. A cubic stays inside the hull of its four points,
@@ -6672,7 +6934,27 @@
       c1y = clamp(pa.y, 0.4, CEIL - 0.4);
       c2y = clamp(pb.y, 0.4, CEIL - 0.4);
     }
-    var NS = 40, i, u, w0, w1, w2, w3, x, y, z, px = 0, py = 0, pz = 0, L = 0;
+    if (RB) {
+      /* THE CLOSED ROOM'S GUARD: the curve as it was wherever it stays
+         RB.keep inside the back wall (most do: the open room's curves
+         reach 11 m); where it would not, its inner points are brought in
+         just so far that it does (then it is still a smooth curve), and
+         the end walls bound them as the art wall does */
+      c1x = clamp(c1x, RB.xs + RB.keep, RB.xe - RB.keep);
+      c2x = clamp(c2x, RB.xs + RB.keep, RB.xe - RB.keep);
+      for (var gk = 0; gk < 12; gk++) {
+        var zmax = -1e9;
+        for (i = 0; i <= 20; i++) {
+          u = i / 20;
+          z = (1 - u) * (1 - u) * (1 - u) * pa.z + 3 * u * (1 - u) * (1 - u) * c1z + 3 * u * u * (1 - u) * c2z + u * u * u * pb.z;
+          if (z > zmax) zmax = z;
+        }
+        if (zmax <= ROOM_IN + 1e-4) break;
+        c1z = Math.max(0.5, c1z - (zmax - ROOM_IN) / 0.7);
+        c2z = Math.max(0.5, c2z - (zmax - ROOM_IN) / 0.7);
+      }
+    }
+    NS = 40; px = 0; py = 0; pz = 0; L = 0;
     for (i = 0; i <= NS; i++) {
       u = i / NS;
       w0 = (1 - u) * (1 - u) * (1 - u); w1 = 3 * u * (1 - u) * (1 - u); w2 = 3 * u * u * (1 - u); w3 = u * u * u;
@@ -6834,6 +7116,16 @@
     };
   }
 
+  /* the closed room (RB): wherever a view, a crossing or a hand would take
+     the eye, it stays RB.keep inside every wall (the views themselves all
+     stand further in than that at the room's own depth; ?depth= may pull
+     some in) */
+  var RB_PEEK = null; /* for checking only (__rooms.peek): the camera put anywhere */
+  function rbKeep(p) {
+    if (!RB) return;
+    p.x = clamp(p.x, RB.xs + RB.keep, RB.xe - RB.keep);
+    p.z = Math.min(p.z, RB.d - RB.keep);
+  }
   function updateCamera() {
     if (!CAM) CAM = newCam();
     var o = camPose(CAM);
@@ -6849,6 +7141,11 @@
       var cx0 = vC.x * Math.cos(ry) + vC.z * Math.sin(ry);
       var cz0 = -vC.x * Math.sin(ry) + vC.z * Math.cos(ry);
       vPos.set(vTgt.x + cx0, Math.max(0.3, vPos.y + roomHand.pitch * 0.03), Math.max(0.3, vTgt.z + cz0));
+    }
+    rbKeep(vPos);
+    if (RB_PEEK) {
+      vPos.fromArray(RB_PEEK[0]);
+      vTgt.fromArray(RB_PEEK[1]);
     }
 
     /* one lens, always. Looking back from the end the near plane moves out
@@ -7773,9 +8070,9 @@
     var UP = V(0, 1, 0), XA = V(1, 0, 0), ZA = V(0, 0, 1), FZ = V(0, 0, -1);
     /* the floor and the wall meet: a soft occlusion line along the foot of
        the skirting, on the floor and on the skirting's face */
-    var L = WALL_L / 2;
-    contact(V(X0, 0.0045, 0.014 + 0.2), UP, XA, FZ, L, 0.2, { ob: 0.2, ba: L, bb: 0.0, core: 0.0, soft: 0.34, softR: 0.17 });
-    contact(V(X0, 0.0375, 0.0145), ZA, XA, UP, L, 0.0375, { ob: -0.0375, ba: L, bb: 0.0, core: 0.0, soft: 0.3, softR: 0.07 });
+    var L = RB ? RB.len / 2 : WALL_L / 2, XM = RB ? RB.xc : X0; /* (the closed room: from wall to wall) */
+    contact(V(XM, 0.0045, 0.014 + 0.2), UP, XA, FZ, L, 0.2, { ob: 0.2, ba: L, bb: 0.0, core: 0.0, soft: 0.34, softR: 0.17 });
+    contact(V(XM, 0.0375, 0.0145), ZA, XA, UP, L, 0.0375, { ob: -0.0375, ba: L, bb: 0.0, core: 0.0, soft: 0.3, softR: 0.07 });
     /* the pen: its tip on the floor, the shadow of its lean on the floor,
        and where its cap meets the wall */
     if (CONTACT.refs.pen) {
@@ -8640,6 +8937,16 @@
       haze: HAZE,
       /* the room's numbers (null in ?room=warm), live; roomApply() after an edit */
       room: ROOMT,
+      /* the closed room (null with ?back=off): its walls, live in part (far, corner: roomApply()) */
+      back: RB,
+      /* for checking: where the camera stands now */
+      peek: function (pos, at) {
+        RB_PEEK = pos ? [pos, at] : null;
+        invalidate();
+      },
+      camNow: function () {
+        return camera.position.toArray().map(function (v) { return +v.toFixed(3); });
+      },
       roomApply: roomApply,
       /* for comparing in one session: false draws through the old composer */
       useFx: function (v) {
@@ -8679,6 +8986,7 @@
         timeline(y);
         var o = camPose(newCam());
         applyHand(o);
+        rbKeep(o.pos);
         var c = camera.clone();
         c.fov = FOV;
         c.position.copy(o.pos);
