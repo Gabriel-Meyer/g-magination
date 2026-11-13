@@ -38,7 +38,9 @@
    under the object. The two modes switch live ("rooms:motion").
 
    LAMPS ARE ALWAYS ON. There is no switch, no off state, no code
-   path that darkens one.
+   path that darkens one. ONE EXCEPTION, A TEST (Nov 2026, the artist:
+   "doch mit anschalten"): the pen's knob is its switch (PEN, ?pen=off).
+   It starts lit, as before; nothing else can be switched.
 
    ONLY WHAT EMITS LIGHT GLOWS. See draw(): the glow is made from the
    emitting meshes alone, and it is cut away wherever any other part
@@ -185,7 +187,7 @@
   /* hint: what a drag does. slider/main: with motion off, the control that
      stands in for what scroll does (it drives the beat named `main`). */
   var CFG = {
-    pen: { hint: "Drag to walk around it", slider: "Take apart", aria: "Take the pen apart", main: "apart", yaw: 68, views: true },
+    pen: { hint: "Drag to walk around it \u00b7 click the knob", slider: "Take apart", aria: "Take the pen apart", main: "apart", yaw: 68, views: true },
     cl: { hint: "Drag to turn it", slider: "Loosen", aria: "Loosen the cluster", main: "knot", yaw: 0 },
     sr: { hint: "Drag to look behind it", slider: "Look behind", aria: "Move to the side and look into the slot", main: "gap", yaw: 72 },
     bx: { hint: "Drag to walk around it", slider: "Walk round it", aria: "Walk round the Light Box, from one side to the other", main: "round", yaw: 60 },
@@ -591,6 +593,13 @@
     }
     hud.classList.toggle("is-on", on);
     hud.classList.toggle("is-used", used);
+    penPlace();
+    /* the pen's strip is the longest (hint, views, slider, switch): never
+       past the edge of the window (the others never reach it) */
+    if (on && hudFor === by.pen && !G.narrow) {
+      var hw = hud.offsetWidth / 2, hx = st.geo.freeX;
+      hud.style.setProperty("--hud-x", clamp(hx, hw + 12, G.W - hw - 12) + "px");
+    }
   }
 
   function setView(v) {
@@ -756,6 +765,95 @@
     invalidate();
   }
 
+  /* ---- THE PEN'S KNOB IS ITS SWITCH (see PEN) ----
+     A press is a short, still press ON the knob: down and up within 0.6 s,
+     moved less than 8 px, over the knob's outline on screen grown to at
+     least 44 px for a finger (28 for a mouse). Anything else is what it
+     always was (a drag walks round, a swipe scrolls): this only listens,
+     beside the drag, and never takes the pointer from it. The same switch
+     is a real button in the control strip (desktop) or the caption
+     (phone), for the keyboard and for screen readers. */
+  var penBtn = null, penDn = null, penHov = false, penBox = null, penV = null;
+  function penKnobHit(x, y, touch) {
+    var k = RIG.penKnob;
+    if (!k || !camera || !canvas || !live || sheetOpen) return false;
+    if (!penBox) {
+      penBox = new THREE.Box3();
+      penV = new THREE.Vector3();
+    }
+    k.updateWorldMatrix(true, false);
+    penBox.setFromObject(k);
+    var r = canvas.getBoundingClientRect(), x0 = 1e9, y0 = 1e9, x1 = -1e9, y1 = -1e9;
+    for (var c = 0; c < 8; c++) {
+      penV.set(c & 1 ? penBox.max.x : penBox.min.x, c & 2 ? penBox.max.y : penBox.min.y, c & 4 ? penBox.max.z : penBox.min.z).project(camera);
+      if (penV.z > 1 || penV.z < -1) return false;
+      var sx = r.left + (penV.x + 1) / 2 * r.width, sy2 = r.top + (1 - penV.y) / 2 * r.height;
+      x0 = Math.min(x0, sx); x1 = Math.max(x1, sx); y0 = Math.min(y0, sy2); y1 = Math.max(y1, sy2);
+    }
+    var min = touch ? 44 : 28, pad = touch ? 10 : 4;
+    var cx = (x0 + x1) / 2, cy = (y0 + y1) / 2;
+    var hw = Math.max((x1 - x0) / 2 + pad, min / 2), hh = Math.max((y1 - y0) / 2 + pad, min / 2);
+    return Math.abs(x - cx) <= hw && Math.abs(y - cy) <= hh;
+  }
+  function penUi() {
+    root.classList.toggle("pen-off", !PEN.on);
+    if (penBtn) penBtn.setAttribute("aria-pressed", String(PEN.on));
+  }
+  function penPlace() {
+    if (!penBtn) return;
+    var narrow = G.narrow, host = narrow ? capTurn && capTurn.parentNode : hud;
+    if (!host) return;
+    if (penBtn.parentNode !== host) {
+      if (narrow) host.insertBefore(penBtn, capTurn);
+      else host.appendChild(penBtn);
+    }
+    var show = !!by.pen && (narrow ? capSt === by.pen : hudFor === by.pen);
+    penBtn.hidden = !show;
+    if (hud) hud.classList.toggle("has-pen", !narrow && show);
+  }
+  function penUiInit() {
+    if (penBtn || !RIG.penKnob) return;
+    penBtn = document.createElement("button");
+    penBtn.type = "button";
+    penBtn.className = "pen-sw";
+    penBtn.innerHTML = '<span class="pen-sw__dot" aria-hidden="true"></span><span class="pen-sw__l">Light</span>';
+    penBtn.setAttribute("aria-label", "Light: press the pen\u2019s knob");
+    penBtn.hidden = true;
+    penBtn.addEventListener("click", function () {
+      penClick(true);
+    });
+    var sp = capHint && capHint.querySelector("span");
+    if (sp) sp.textContent = "Drag to turn \u00b7 tap the knob";
+    penUi();
+    penPlace();
+    window.addEventListener("pointerdown", function (e) {
+      var t = e.target;
+      if (!live || (t && t.closest && t.closest(SOLID))) return;
+      if (e.pointerType === "mouse" && e.button !== 0) return;
+      penDn = { id: e.pointerId, x: e.clientX, y: e.clientY, t: performance.now(), touch: e.pointerType !== "mouse" };
+    }, { capture: true, passive: true });
+    window.addEventListener("pointermove", function (e) {
+      if (penDn && e.pointerId === penDn.id && Math.hypot(e.clientX - penDn.x, e.clientY - penDn.y) > 8) penDn = null;
+      if (e.pointerType === "mouse" && !e.buttons) {
+        var t = e.target, h = !(t && t.closest && t.closest(SOLID)) && penKnobHit(e.clientX, e.clientY, false);
+        if (h !== penHov) {
+          penHov = h;
+          root.classList.toggle("pen-knob", h);
+        }
+      }
+    }, { capture: true, passive: true });
+    window.addEventListener("pointerup", function (e) {
+      var d = penDn;
+      penDn = null;
+      if (!d || e.pointerId !== d.id) return;
+      if (performance.now() - d.t > 600 || Math.hypot(e.clientX - d.x, e.clientY - d.y) > 8) return;
+      if (penKnobHit(e.clientX, e.clientY, d.touch)) penClick(true);
+    }, { capture: true, passive: true });
+    window.addEventListener("pointercancel", function () {
+      penDn = null;
+    }, { capture: true, passive: true });
+  }
+
   function onKey(e) {
     if (!live) return;
     var st = by[e.currentTarget.getAttribute("data-scene")];
@@ -905,6 +1003,7 @@
       }
       capHint.hidden = !show;
     }
+    penPlace();
   }
 
   var capRaf = 0;
@@ -1694,7 +1793,7 @@
             .replace(
               "#include <common>",
               "#include <common>\nvarying vec3 vObj;\nuniform vec2 uAxis;\n" +
-                (vmap ? "uniform sampler2D uVen;\nuniform vec3 uVenK;\n#define VEN_GAIN uVenK.x\n#define VEN_MEAN uVenK.y\n#define VEN_CONTRAST uVenK.z\n#define VEN_COPIES " + VEN.copies.toFixed(1) + "\n" : "") +
+                (vmap ? "uniform sampler2D uVen;\nuniform vec3 uVenK;\n#define VEN_GAIN uVenK.x\n#define VEN_MEAN uVenK.y\n#define VEN_CONTRAST uVenK.z\n#define VEN_COPIES " + VEN.copies.toFixed(1) + "\n" + "#define VEN_LIMB vec3(" + VEN.limb.map(function (x) { return x.toFixed(3); }).join(",") + ")\n" : "") +
                 GLSL_NOISE +
                 "float vGrain(){ vec3 q = vObj;\n" +
                 " float a = vN(vec3(q.x * 0.21, q.y * 0.0042, q.z * 0.21));\n" +
@@ -1746,7 +1845,17 @@
                        station's distance. */
                     "float vGg = max(VEN_MEAN + (vT.g - VEN_MEAN) * VEN_CONTRAST, 0.02);\n" +
                     "vec3 vE = vec3(0.5 + 3.6 * vGg, 0.42 * vGg + 0.006, 0.0) * VEN_GAIN;\n" +
-                    "vE = mix(vE, vec3(dot(vE, vec3(0.6, 0.35, 0.05))) * vec3(1.0, 0.62, 0.36), 0.35 * (1.0 - smoothstep(0.0, 0.05, vAx)));\n" +
+                    "vE = mix(vE, vec3(dot(vE, vec3(0.6, 0.35, 0.05))) * vec3(1.0, 0.7, 0.3), 0.35 * (1.0 - smoothstep(0.0, 0.05, vAx)));\n" +
+                    /* LIT FROM INSIDE, SEEN FROM OUTSIDE (photo pass 2):
+                       face-on the light crosses 0.7 mm of oak; toward the
+                       silhouette it runs through the veneer at a slant, so
+                       the photograph's body is a deeper, redder orange at
+                       both edges and its yellow streaks sit in the middle.
+                       VEN.limb = (edge level, edge green, power). */
+                    "float vNdv = clamp(dot(normalize(normal), normalize(vViewPosition)), 0.0, 1.0);\n" +
+                    "float vLb = pow(vNdv, VEN_LIMB.z);\n" +
+                    "vE *= mix(VEN_LIMB.x, 1.0, vLb);\n" +
+                    "vE.g *= mix(VEN_LIMB.y, 1.0, vLb);\n" +
                     "totalEmissiveRadiance *= vE * mix(0.55, 1.0, vFall);\n"
                   : "float vFall = smoothstep(0.0, 0.3, vAx) * (1.0 - 0.62 * smoothstep(0.6, 1.0, vAx));\n" +
                     "totalEmissiveRadiance *= mix(0.24, 1.0, vFall) * mix(0.5, 1.3, vG);\n" +
@@ -2570,7 +2679,7 @@
      (0.9, 0.145, 0.005)); contrast: how much the streaks are lifted above
      the photo's own. If the strip is
      missing the drawn grain and 0xff3c00 come back. */
-  var VEN = { url: "media/extra/rooms-v2/lichtschreiber-veneer-lit.jpg", gain: 0.9, mean: 0.145, contrast: 1.6, copies: 4, glow: 0.45 };
+  var VEN = { url: "media/extra/rooms-v2/lichtschreiber-veneer-lit.jpg", gain: 0.9, mean: 0.145, contrast: 1.6, copies: 4, glow: 0.45, limb: [0.5, 0.7, 0.8] };
   var VENEER_MAP = null;
 
   /* THE KNOB. "The rectangle will be the new solution but for right now
@@ -2595,13 +2704,126 @@
      wall, so the station and the entrance are no brighter overall (measured:
      mean of the frame at y = 0 and at the station unchanged). Was 0xff6a24,
      inner 0.34, wash 2.3. */
-  var PEN_LIGHT = { color: 0xff5a1a, inner: 0.46, wash: 1.75 };
+  /* along (photo pass 2): the three sources share the column's light by
+     how far each sits from the wall. Leaning, the top one is 16 cm off it
+     and the bottom one 32 cm, so at equal power the wash was a round hot
+     spot under the cap; a lit column is a line source (falls off as 1/d,
+     not 1/d^2), and the photograph's wash runs the pen's whole length.
+     Same sum, so the light on floor and room is the same. Standing upright
+     (take-apart) they are all equally far from the wall: back to 1, 1, 1. */
+  var PEN_LIGHT = { color: 0xff5a1a, inner: 0.46, wash: 1.75, along: [1.5, 0.95, 0.55] };
   if (ROOMT) { PEN_LIGHT.inner *= ROOMT.pen.inner; PEN_LIGHT.wash *= ROOMT.pen.wash; } /* the test room (notes/room-test.md) */
+
+  /* THE SWITCH (a test: the artist, Nov 2026, "doch mit anschalten"; the
+     rule until then was that lamps are never off). A ballpoint pen clicks:
+     the knob is the switch. Read from his films (notes/photo-pen.md, "The
+     switch"): the knob is pressed from above with the fingertips, the light
+     changes as the press bottoms out, and comes up in under 0.1 s (one or
+     two frames at 120 fps: D29F4CC6 ... Copy.mov, 5.80 s and 30.10 s) and
+     goes out in about 0.05 s (26.45 s). The knob is back at the same height
+     afterwards, latched or not, to within what the film can show (about
+     3 mm); the travel itself is too small to measure there (the push foot
+     switch, INT-switch, under the knob): TRAVEL is set to a small, visible
+     5 mm, not a measured value.
+     PEN.on: the switch; PEN.lit: the light, 0..1, which everything the pen
+     lights follows (body, strips, its own lights, the bounce on the room,
+     the haze, the glow, the orange in its steel). ?pen=off starts unlit;
+     then, with motion on, the knob clicks by itself once the camera has
+     arrived at the pen (unless the visitor has pressed it already). */
+  var PEN_SW = { on: 0.08, off: 0.05, down: 0.09, hold: 0.07, up: 0.16, travel: 5, auto: 0.8 };
+  var PEN_OAK = 0xe0cba6; /* unlit: pale natural oak (his photographs, ref 06-11, 14) */
+  var PEN = { on: Q.get("pen") !== "off", lit: 1, a: 1, b: 1, t0: 0, dur: 0, press: 0, pt0: 0, flip: false, auto: false, autoT: 0, used: false };
+  PEN.lit = PEN.a = PEN.b = PEN.on ? 1 : 0;
+  PEN.auto = !PEN.on;
+  var PEN_U = { value: PEN.lit }; /* the steel's orange edge follows the light */
+  function penSet(on) {
+    PEN.on = on;
+    PEN.a = PEN.lit;
+    PEN.b = on ? 1 : 0;
+    PEN.dur = on ? PEN_SW.on : PEN_SW.off;
+    PEN.t0 = performance.now();
+    penUi();
+    invalidate();
+  }
+  /* a press of the knob: travel down, the switch latches at the bottom,
+     the knob springs back; with motion off no travel, only the switch */
+  function penClick(byHand) {
+    if (byHand) PEN.used = true;
+    PEN.auto = false;
+    if (PEN.autoT) {
+      clearTimeout(PEN.autoT);
+      PEN.autoT = 0;
+    }
+    if (REDUCED) {
+      penSet(!PEN.on);
+      return;
+    }
+    if (PEN.pt0) return; /* already travelling */
+    PEN.pt0 = performance.now();
+    PEN.flip = false;
+    invalidate();
+  }
+  function penArrived() {
+    var st = by.pen;
+    if (!st || REDUCED || T.cur !== st.i || T.mv) return false;
+    return T.r[st.i] >= 1 && !(T.r[st.i + 1] > 0) && actW(st, "apart") < 0.005 && Math.abs(window.scrollY - sy) < 2;
+  }
+  /* per frame: true while something is still moving */
+  function penStep() {
+    var now = performance.now(), again = false, ez = function (x) { return 1 - (1 - x) * (1 - x); };
+    if (PEN.pt0) {
+      var t = (now - PEN.pt0) / 1000, d = PEN_SW.down, h = PEN_SW.hold, u = PEN_SW.up;
+      if (t < d) PEN.press = ez(t / d);
+      else if (t < d + h) PEN.press = 1;
+      else if (t < d + h + u) PEN.press = 1 - ez((t - d - h) / u);
+      else {
+        PEN.press = 0;
+        PEN.pt0 = 0;
+      }
+      if (t >= d && !PEN.flip) {
+        PEN.flip = true;
+        penSet(!PEN.on);
+      }
+      again = again || !!PEN.pt0;
+    }
+    if (PEN.t0) {
+      var k = PEN.dur > 0 ? (now - PEN.t0) / 1000 / PEN.dur : 1;
+      if (k >= 1) {
+        PEN.lit = PEN.b;
+        PEN.t0 = 0;
+      } else {
+        PEN.lit = PEN.a + (PEN.b - PEN.a) * ez(k);
+        again = true;
+      }
+    }
+    PEN_U.value = PEN.lit;
+    /* (the closed room: the breath of orange the pen throws on the far walls is the pen's light too, and follows its switch) */
+    if (RB && RB.far[0] && typeof RTU !== "undefined" && RTU && RTU.uFC && RTU.uFC.value[0]) RTU.uFC.value[0].setHex(RB.far[0][1]).multiplyScalar(RB.far[0][2] * PEN.lit);
+    if (PEN.auto && !PEN.used) {
+      if (penArrived()) {
+        if (!PEN.autoT)
+          PEN.autoT = setTimeout(function () {
+            PEN.autoT = 0;
+            if (PEN.auto && !PEN.used && penArrived()) penClick(false);
+          }, PEN_SW.auto * 1000);
+      } else if (PEN.autoT) {
+        clearTimeout(PEN.autoT);
+        PEN.autoT = 0;
+      }
+    }
+    return again;
+  }
 
   /* The artist, later: "die Chromteile vom Stift wieder etwas mehr reflektieren
      lassen": about half way back toward the mirror finish. Was color 0x8c8782,
      roughness 0.34, env 0.62, direct 0.35, face [0.78, 0.76, 0.74]. */
-  var STEEL = { color: 0xa5a19d, roughness: 0.22, env: 1.0, direct: 0.5, face: [0.93, 0.91, 0.89], edge: [1.25, 0.5, 0.2] };
+  /* Photo pass 3 (his films of the spun tip, IMG_8545/8546, decoded from
+     HLG: a true mirror, the workshop sharp in it): 0.12 -> 0.08.
+     Photo pass 2: roughness 0.22 -> 0.12 and its own surroundings
+     (penEnv): the photographs' tip, knob and clip are mirror-polished, with
+     hard stripes, and the studio map's bands blurred at 0.22 into a soft
+     brown on the tip. env stays 1.0 (no less reflective). */
+  var STEEL = { color: 0xa5a19d, roughness: 0.08, env: 1.0, direct: 0.5, face: [0.93, 0.91, 0.89], edge: [1.25, 0.5, 0.2] };
   function penSteel(m) {
     if (m.userData.penSteel) return;
     m.userData.penSteel = true;
@@ -2609,15 +2831,19 @@
     m.roughness = STEEL.roughness;
     m.envMapIntensity = STEEL.env;
     m.color.setHex(STEEL.color);
+    if (PEN_ENV) m.envMap = PEN.lit > 0.5 ? PEN_ENV : PEN_ENV_OFF;
+    PEN_STEEL.push(m);
     var v3 = function (a) { return "vec3(" + a.map(function (x) { return x.toFixed(3); }).join(",") + ")"; };
     m.onBeforeCompile = function (sh) {
+      sh.uniforms.uPenLit = PEN_U;
+      sh.fragmentShader = sh.fragmentShader.replace("#include <common>", "#include <common>\nuniform float uPenLit;");
       sh.fragmentShader = sh.fragmentShader.replace(
         "#include <lights_fragment_end>",
         "#include <lights_fragment_end>\n" +
           /* the pen's own lights centimetres away: no white glare */
           "reflectedLight.directSpecular *= " + STEEL.direct.toFixed(3) + ";\n" +
           "{ float stE = 1.0 - clamp(dot(normalize(geometryNormal), normalize(geometryViewDir)), 0.0, 1.0);\n" +
-          "  reflectedLight.indirectSpecular *= mix(" + v3(STEEL.face) + ", " + v3(STEEL.edge) + ", smoothstep(0.35, 0.95, stE)); }\n"
+          "  reflectedLight.indirectSpecular *= mix(" + v3(STEEL.face) + ", mix(" + v3(STEEL.face) + ", " + v3(STEEL.edge) + ", uPenLit), smoothstep(0.35, 0.95, stE)); }\n"
       );
     };
     m.customProgramCacheKey = function () {
@@ -2625,6 +2851,99 @@
     };
     m.needsUpdate = true;
   }
+
+  /* WHAT THE PEN'S STEEL SEES (photo pass 2). In the photographs the tip,
+     knob and clip are mirrors of where the pen stands: the floor below
+     (dark, with the pen's own orange pool right under the tip), the wall
+     behind, lit orange along the pen, and the room in front. The shared
+     studio map (studioEnv) is a photographer's softboxes; its hard white
+     strips are kept here only as a few hairlines and one bar, so the metal
+     still has hard light/dark bands and never goes black or flat grey.
+     Bearing 0 is the room side (+z); the wall is behind (bearing 180).
+     Built once, like the studio map (a PMREM of a small scene): no pass
+     per frame, no download. */
+  function penEnv(lit) {
+    var s = new THREE.Scene(), L = lit ? "1.0" : "0.0";
+    s.add(
+      new THREE.Mesh(
+        new THREE.SphereGeometry(30, 48, 24),
+        new THREE.ShaderMaterial({
+          side: THREE.BackSide,
+          vertexShader:
+            "varying vec3 p;\nvoid main(){ p = position;" +
+            " gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.0); }",
+          fragmentShader:
+            "varying vec3 p;\nvoid main(){" +
+            " vec3 d = normalize(p);" +
+            /* the room in front and above: dim, a little warm from the lamp */
+            " vec3 room = vec3(0.15,0.13,0.12);" +
+            " vec3 ceil = vec3(0.42,0.40,0.38);" +
+            /* the wall behind the pen, lit orange: brightest just behind it */
+            " float wall = smoothstep(0.0, -0.9, d.z) * (1.0 - smoothstep(0.35, 0.95, abs(d.y)));" +
+            " vec3 c = mix(room, ceil, smoothstep(0.3, 0.95, d.y));" +
+            " c += mix(vec3(0.05,0.045,0.04), vec3(1.0,0.28,0.07) * 1.15, " + L + ") * wall * (0.35 + 0.65 * exp(-d.x * d.x * 9.0));" +
+            /* the floor: dark, red-brown; the pen's own pool right below */
+            " if (d.y < 0.0) {" +
+            "  vec3 fl = mix(vec3(0.24,0.2,0.18), vec3(0.17,0.11,0.085), smoothstep(-0.05,-0.5,d.y));" +
+            "  fl += " + L + " * vec3(0.6,0.15,0.04) * smoothstep(-0.75,-0.97,d.y);" +
+            /* the polished floor's own sheen of the room's light far off */
+            "  fl += vec3(0.22,0.2,0.19) * smoothstep(-0.18,-0.02,d.y) * smoothstep(0.2,0.6,d.z);" +
+            "  c = mix(c, fl, smoothstep(0.0,-0.12,d.y)); }" +
+            " gl_FragColor = vec4(c, 1.0); }"
+        })
+      )
+    );
+    function strip(bearing, w, hex, power, h, y) {
+      var a = bearing * RAD, d = 10;
+      var m = new THREE.Mesh(
+        new THREE.PlaneGeometry(w, h || 16),
+        new THREE.MeshBasicMaterial({ color: new THREE.Color(hex).multiplyScalar(power), side: THREE.DoubleSide })
+      );
+      m.position.set(Math.sin(a) * d, y == null ? 3 : y, Math.cos(a) * d);
+      m.lookAt(0, y == null ? 3 : y, 0);
+      s.add(m);
+    }
+    /* hard bands: a few hairlines and broad lights in the room */
+    strip(-40, 1.6, 0xfff4ea, 2.6, 9, 4);
+    strip(-14, 0.22, 0xffffff, 6.0);
+    strip(34, 0.35, 0xffffff, 4.0, 9, 4);
+    strip(70, 1.2, 0xffe2c8, 2.2, 6, 3);
+    strip(-95, 0.5, 0xffffff, 3.0, 8, 3);
+    /* hairlines that run on below the horizon: on the tip cone they are
+       the hard light stripe down its length the photographs show */
+    strip(-24, 0.3, 0xffffff, 3.6, 30, -4);
+    strip(28, 0.9, 0xfff0e4, 1.8, 30, -4);
+    /* the lit body itself, close by along the axis: the clip and the knob
+       look straight at it */
+    if (lit) {
+      strip(160, 2.2, 0xff6a1e, 2.4, 22, 0);
+      strip(-160, 1.2, 0xff7a2a, 1.8, 22, 0);
+    } else strip(160, 2.2, PEN_OAK, 0.12, 22, 0); /* unlit: the pale wood in the room's dim light */
+    /* across the room side: a flat mirror (the clip) needs bands along
+       its length that slide as you move */
+    [[-1.4, 0.4, 3.2], [1.4, 0.45, 3.6], [4.2, 0.9, 2.4], [7.5, 0.35, 4.4], [12, 1.4, 2.4]].forEach(function (b) {
+      var bar = new THREE.Mesh(
+        new THREE.PlaneGeometry(19, b[1]),
+        new THREE.MeshBasicMaterial({ color: new THREE.Color(0xfff6ee).multiplyScalar(b[2]), side: THREE.DoubleSide })
+      );
+      bar.position.set(0, b[0], 9.4);
+      bar.lookAt(0, b[0], 0);
+      s.add(bar);
+    });
+    /* the ceiling's light above and in front: the knob's dome catches it */
+    var bank = new THREE.Mesh(
+      new THREE.PlaneGeometry(5, 2.2),
+      new THREE.MeshBasicMaterial({ color: new THREE.Color(0xfff8f0).multiplyScalar(3.0), side: THREE.DoubleSide })
+    );
+    bank.position.set(-1.5, 12, 4);
+    bank.lookAt(0, 0, 0);
+    s.add(bank);
+    var pm = new THREE.PMREMGenerator(renderer);
+    var tex = pm.fromScene(s, 0).texture;
+    pm.dispose();
+    return tex;
+  }
+  var PEN_ENV = null, PEN_ENV_OFF = null, PEN_STEEL = [];
 
   function knobGeometry(kind, orig) {
     if (kind !== "dome") return orig;
@@ -2667,6 +2986,10 @@
       VENEER_MAP.needsUpdate = true;
     }
     var model = gl.scene;
+    if (!PEN_ENV) {
+      PEN_ENV = penEnv(true);
+      PEN_ENV_OFF = penEnv(false); /* switched off: no orange wall, pool or body in its steel */
+    }
     var mats = fixMaterials(model, 0.3);
     model.traverse(function (o) {
       if (o.isMesh && o.name === "GEO-teacan") o.geometry = knobGeometry(KNOB, o.geometry);
@@ -2705,6 +3028,12 @@
     /* its light in the air: the column, in two soft lengths */
     hazeAt(lights[0], 0xff6a24, 0.014, 0.9, 0.2);
     hazeAt(lights[2], 0xff6a24, 0.014, 0.9, 0.2);
+    var litF = function () { return PEN.lit; }; /* off, there is no light in the air */
+    HAZE.list[HAZE.list.length - 1].f = HAZE.list[HAZE.list.length - 2].f = litF;
+    RIG.penKnob = null;
+    model.traverse(function (o) {
+      if (o.isMesh && o.name === "GEO-teacan") RIG.penKnob = o;
+    });
 
     /* the blue cord: leaves through the ball tip at floor level and runs
        off along the floor, back toward the entrance, to the wall */
@@ -2717,7 +3046,10 @@
     });
     var cord = new THREE.Mesh(
       new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts, false, "catmullrom", 0.5), 220, 0.0085, 8, false),
-      new THREE.MeshStandardMaterial({ color: 0x1f4fbf, roughness: 0.62, envMapIntensity: 0.3 })
+      /* photo pass 2: the photographs' cord is a bright royal-blue
+         textile with a pale sheen running along its top; at 0.62 it was a
+         flat dark tube. Not emissive, never in the glow. */
+      new THREE.MeshStandardMaterial({ color: 0x2a5ce0, roughness: 0.4, envMapIntensity: 0.45 })
     );
     cord.layers.enable(GLOW);
     occluders.push(cord);
@@ -2736,7 +3068,10 @@
        1), while the body slides out into the room. The tip never leaves the
        floor and nothing moves down. window.__rooms.penClearance() measures it. */
     RIG.penParts = parts;
+    var oakC = new THREE.Color(PEN_OAK), litC = new THREE.Color();
+    var envOn = true;
     RIG.pen = function (ex) {
+        var L = PEN.lit;
         pivot.rotation.x = LEAN * (1 - sstep(ex, 0, 0.28));
         var s1 = sstep(ex, 0.1, 0.66); /* body slides aside, into the room */
         var s2 = sstep(ex, 0.26, 1.0); /* the stack separates along the axis */
@@ -2744,7 +3079,7 @@
           var p = parts[i];
           p.o.position.set(
             p.home.x + (p.side ? p.side[0] * s1 : 0),
-            p.home.y + p.lift * s2,
+            p.home.y + p.lift * s2 - (p.o.name === "GEO-teacan" ? PEN_SW.travel * PEN.press : 0),
             p.home.z + (p.side ? p.side[1] * s1 : 0)
           );
         }
@@ -2752,22 +3087,36 @@
            brighter. The veneer is only a shade, so it stops glowing as it
            leaves them — and picks up their light from the side instead. */
         for (i = 0; i < mats.veneer.length; i++) {
-          mats.veneer[i].emissiveIntensity = VENEER * (1 - 0.94 * s1);
+          mats.veneer[i].emissiveIntensity = VENEER * (1 - 0.94 * s1) * L;
           /* lit from inside, the wood should not also be front-lit by the
-             stand-in wash light; bared, it is plain oak again */
-          mats.veneer[i].color.setHex(0xb0814d).multiplyScalar(lerp(VENEER_MAP ? 0.05 : 0.4, 1, s1));
+             stand-in wash light; bared, it is plain oak again. Switched
+             off it is the pale oak of his photographs, lit by the room. */
+          litC.setHex(0xb0814d).multiplyScalar(lerp(VENEER_MAP ? 0.05 : 0.4, 1, s1));
+          mats.veneer[i].color.copy(oakC).lerp(litC, L);
           /* lit, the room's reflections on it are a faint sheen at most:
              at full strength they lay a grey veil over the orange */
-          if (VENEER_MAP) mats.veneer[i].envMapIntensity = lerp(0.12, 0.4, s1);
+          if (VENEER_MAP) mats.veneer[i].envMapIntensity = lerp(0.15, lerp(0.12, 0.4, s1), L);
         }
-        for (i = 0; i < mats.led.length; i++) mats.led[i].emissiveIntensity = 3.2 + 4.6 * s1;
+        for (i = 0; i < mats.led.length; i++) mats.led[i].emissiveIntensity = (3.2 + 4.6 * s1) * L;
         for (i = 0; i < lights.length; i++) {
           lights[i].position.y = lights[i].userData.h + 0.356 * s2;
-          lights[i].intensity = PEN_LIGHT.inner + 0.2 * s1;
+          lights[i].intensity = (PEN_LIGHT.inner * lerp(PEN_LIGHT.along[i], 1, sstep(ex, 0, 0.28)) + 0.2 * s1) * L;
         }
         wash.position.y = 0.95 + 0.3 * s2;
+        wash.intensity = PEN_LIGHT.wash * L;
+        /* the cord's sheen is mostly the lit pen beside it */
+        cord.material.envMapIntensity = lerp(0.2, 0.45, L);
+        /* its glow on the room (the white room's bounce[0]) */
+        if (RTU && ROOMT && ROOMT.bounce[0] && ROOMT.bounce[0][0][0] === X.pen) RTU.uBC.value[0].setHex(ROOMT.bounce[0][1]).multiplyScalar(ROOMT.bounce[0][2] * L);
+        /* what its steel sees: the orange wall and pool only while lit */
+        var eo = L > 0.5;
+        if (eo !== envOn && PEN_ENV_OFF) {
+          envOn = eo;
+          for (i = 0; i < PEN_STEEL.length; i++) PEN_STEEL[i].envMap = eo ? PEN_ENV : PEN_ENV_OFF;
+        }
     };
     RIG.pen(0);
+    penUiInit();
   }
 
   /* ---------- 02: the cluster ---------- */
@@ -8286,7 +8635,8 @@
         hzV.applyMatrix4(camera.matrixWorldInverse);
         if (hzV.length() > 40) continue;
         FX.hzP[n].set(hzV.x, hzV.y, hzV.z, h.R);
-        FX.hzC[n].set(h.c.r * h.k, h.c.g * h.k, h.c.b * h.k, h.e);
+        var hk = h.k * (h.f ? h.f() : 1);
+        FX.hzC[n].set(h.c.r * hk, h.c.g * hk, h.c.b * hk, h.e);
         n++;
       }
     }
@@ -8693,6 +9043,7 @@
     var dt = lastT ? Math.min(1, Math.max(0.001, (ts - lastT) / 1000)) : 0.016;
     var again = false, i;
     if (gfStep(dt)) again = true; /* the torch's colour and the ball's slow turn */
+    if (penStep()) again = true; /* the pen's knob and its light */
 
     /* scroll: followed exactly with motion off (it only ever causes a cut
        there), eased a little with motion on so the camera glides */
@@ -9505,6 +9856,29 @@
       ven: function () { return VEN; },
       /* Bubblegum's glass, live: globe().u.value = (inner light, limb, edge, reflection) */
       globe: function () { return GLOBE; },
+      /* the pen's switch, for checking: state, and where its knob is on
+         screen (CSS px, the centre of its outline) */
+      pen: function () {
+        var c = null;
+        if (RIG.penKnob && camera && canvas) {
+          var b = new THREE.Box3().setFromObject(RIG.penKnob), v = b.getCenter(new THREE.Vector3()).project(camera), r = canvas.getBoundingClientRect();
+          c = [r.left + (v.x + 1) / 2 * r.width, r.top + (1 - v.y) / 2 * r.height];
+        }
+        return { on: PEN.on, lit: PEN.lit, press: PEN.press, auto: PEN.auto, used: PEN.used, knob: c };
+      },
+      /* for stills of the click: hold the knob at press (0..1) and the
+         light at lit (0..1); null lets them run again */
+      penPose: function (press, lit) {
+        PEN.pt0 = PEN.t0 = 0;
+        PEN.auto = false;
+        PEN.press = press;
+        PEN.lit = PEN.a = PEN.b = lit;
+        PEN.on = lit > 0.5;
+        PEN_U.value = lit;
+        penUi();
+        invalidate();
+        return { press: PEN.press, lit: PEN.lit };
+      },
       penClearance: function () {
         if (!RIG.penParts) return null;
         var b = new THREE.Box3(), minZ = 1e9, minY = 1e9, atZ = 0;

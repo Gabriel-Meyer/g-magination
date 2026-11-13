@@ -1115,6 +1115,67 @@ html:not(.gl) .hud {
   display: none;
 }
 
+/* ---------- the pen's switch (a test: ?pen=off; rooms3d.js PEN) ----------
+   One quiet toggle beside the hint: a dot that is lit (the accent) or
+   hollow, and the word. The knob in the room is the same switch; over it
+   the pointer becomes a hand. */
+.pen-sw {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.pen-sw[hidden] {
+  display: none;
+}
+
+.hud .pen-sw[aria-pressed="true"],
+.hud .pen-sw[aria-pressed="false"] {
+  color: var(--ink);
+  background: none;
+}
+
+.pen-sw__dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  border: 1px solid currentColor;
+  box-sizing: border-box;
+}
+
+.pen-sw[aria-pressed="true"] .pen-sw__dot {
+  background: var(--accent);
+  border-color: var(--accent);
+  box-shadow: 0 0 6px var(--accent);
+}
+
+.hud.is-used.has-pen {
+  opacity: 1;
+  visibility: visible;
+}
+
+/* motion off, the pen has the most controls: the hint goes on a row of
+   its own above them, so the strip stays inside the free half */
+.hud.has-pen.has-controls {
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 2px 14px;
+  width: max-content;
+  max-width: min(600px, calc(100vw - 24px));
+  border-radius: 20px;
+  padding: 6px 16px 8px;
+}
+
+.hud.has-pen.has-controls .hud__hint {
+  flex-basis: 100%;
+  justify-content: center;
+  padding: 2px 0 0;
+}
+
+html.pen-knob .scene canvas {
+  cursor: pointer;
+}
+
 /* ---------- motion ---------- */
 
 html[data-motion="reduced"] .scene canvas,
@@ -1901,6 +1962,31 @@ html[data-motion="reduced"] .hud {
   .cap[data-state="beat"] .cap__th img,
   html[data-motion="reduced"] .cap__th img {
     border-radius: 999px;
+  }
+
+  /* on the phone the switch is one round button, like the turn beside it
+     (the word stays for screen readers in its aria-label) */
+  .cap .pen-sw {
+    flex: none;
+    width: 44px;
+    height: 44px;
+    margin-left: auto;
+    justify-content: center;
+    padding: 0;
+    color: var(--soft);
+  }
+
+  .cap .pen-sw .pen-sw__l {
+    display: none;
+  }
+
+  .cap .pen-sw__dot {
+    width: 11px;
+    height: 11px;
+  }
+
+  .cap .pen-sw:not([hidden]) + .cap__turn {
+    margin-left: 0;
   }
 
   .cap__turn {
