@@ -69,8 +69,20 @@
      nothing. Any way out of this file without a room brings them back:
      an early return below leaves `booting` false. */
   var booting = false;
+  /* LOADING (the head script's __roomsLoad, rooms.css "LOADING",
+     notes/loading.md): this file has run. Every way out without a room
+     also lets the page go (loadDone); the room itself lets it go when its
+     first screen is right (loadReady, end of boot()). */
+  var LOAD = window.__roomsLoad || null;
+  if (LOAD) LOAD.boot = true;
+  function loadDone(why) {
+    if (LOAD && LOAD.done) LOAD.done(why);
+  }
   Promise.resolve().then(function () {
-    if (!booting) root.classList.remove("gl-soon");
+    if (!booting) {
+      root.classList.remove("gl-soon");
+      loadDone("none");
+    }
   });
   if (!host) return;
 
@@ -109,12 +121,15 @@
   var TUNING = Q.get("tune") === "1";
   var TUNE = null;
 
-  try {
-    var probe = document.createElement("canvas");
-    if (!probe.getContext("webgl2")) return; /* stills stay; page is complete */
-  } catch (e) {
-    return;
-  }
+  /* (the head script has made this same probe when it put up the loading
+     state, LOAD.gl2: a WebGL context is not made twice for it) */
+  if (!(LOAD && LOAD.gl2))
+    try {
+      var probe = document.createElement("canvas");
+      if (!probe.getContext("webgl2")) return; /* stills stay; page is complete */
+    } catch (e) {
+      return;
+    }
 
   var CDN = "https://cdn.jsdelivr.net/npm/three@0.160.0/";
   var COARSE = window.matchMedia("(pointer: coarse)").matches;
@@ -188,7 +203,7 @@
      stands in for what scroll does (it drives the beat named `main`). */
   var CFG = {
     pen: { hint: "Drag to walk around it \u00b7 click the knob", slider: "Take apart", aria: "Take the pen apart", main: "apart", yaw: 68, views: true },
-    cl: { hint: "Drag to turn it", slider: "Loosen", aria: "Loosen the cluster", main: "knot", yaw: 0 },
+    cl: { hint: "Drag to turn it \u00b7 click the switch", slider: "Loosen", aria: "Loosen the cluster", main: "knot", yaw: 0 },
     sr: { hint: "Drag to look behind it", slider: "Look behind", aria: "Move to the side and look into the slot", main: "gap", yaw: 72 },
     bx: { hint: "Drag to walk around it", slider: "Walk round it", aria: "Walk round the Light Box, from one side to the other", main: "round", yaw: 60 },
     bs: { hint: "Drag to walk around them", slider: "Filaments", aria: "Come close to one filament, then the other", main: "filament", yaw: 74 },
@@ -594,6 +609,7 @@
     hud.classList.toggle("is-on", on);
     hud.classList.toggle("is-used", used);
     penPlace();
+    clPlace();
     /* the pen's strip is the longest (hint, views, slider, switch): never
        past the edge of the window (the others never reach it) */
     if (on && hudFor === by.pen && !G.narrow) {
@@ -629,7 +645,7 @@
       });
   }
 
-  /* Motion switched on or off (entrance prompt or the header control).
+  /* Motion switched on or off (the Motion switch in the header).
      Everything hand-operated goes back to rest so neither mode inherits a
      pose it has no way to undo. */
   window.addEventListener("rooms:motion", function (e) {
@@ -1004,6 +1020,7 @@
       capHint.hidden = !show;
     }
     penPlace();
+    clPlace();
   }
 
   var capRaf = 0;
@@ -1580,9 +1597,14 @@
        colour); the part emits nothing and stays out of the glow. */
     var extra = warm
       ? "reflectedLight.indirectDiffuse += material.diffuseColor * vec3(" +
-        warm[0].toFixed(3) + "," + warm[1].toFixed(3) + "," + warm[2].toFixed(3) + ");\n"
+        warm[0].toFixed(3) + "," + warm[1].toFixed(3) + "," + warm[2].toFixed(3) + ")" + (warm.k ? " * uWarmK" : "") + ";\n"
       : "";
     mat.onBeforeCompile = function (sh) {
+      /* warm.k (Bubblegum's): a live factor, the lamp's switch */
+      if (warm && warm.k) {
+        sh.uniforms.uWarmK = warm.k;
+        sh.fragmentShader = sh.fragmentShader.replace("#include <common>", "#include <common>\nuniform float uWarmK;");
+      }
       sh.fragmentShader = sh.fragmentShader.replace(
         "#include <lights_fragment_end>",
         "#include <lights_fragment_end>\n" +
@@ -1592,7 +1614,7 @@
       );
     };
     mat.customProgramCacheKey = function () {
-      return "tame:" + scale + ":" + cap + ":" + (warm ? warm.join("/") : "");
+      return "tame:" + scale + ":" + cap + ":" + (warm ? warm.join("/") + (warm.k ? "k" : "") : "");
     };
   }
 
@@ -1644,6 +1666,49 @@
     if (typeof invalidate === "function") invalidate();
   };
 
+  /* BUBBLEGUM'S WALL SWITCH (the artist: "Do a light switch on the wall for
+     the bubblegum light as well, match turned off with the turned off
+     photos"; see notes/photo-bubblegum.md, "The switch"). An ordinary white
+     rocker switch on the art wall beside the lamp; it works like the pen's
+     knob (PEN): a short still press on it, or the "Light" button. CLS.on:
+     the switch; CLS.lit: the light, 0..1, which everything the lamp lights
+     follows (the globes' glow and bloom, its point light, its light on
+     ceiling and wall, on its cord and on the parts at its middle, its haze,
+     its share of the far walls, the lit neighbours in each globe).
+     Timing from his film v02 (30 fps): it comes on between two frames
+     (1.668 s) and goes out in one to two (8.475 s): on 33 ms, off 66 ms.
+     rock: the rocker's travel; deg: how far it tips; pos: [x, y] on the
+     wall (m), 1.05 m to the side of the lamp, at a switch's height.
+     ?cl=off starts unlit (for checking); nothing switches by itself. */
+  var CL_SW = { on: 0.033, off: 0.066, rock: 0.07, deg: 3.2, pos: [9.55, 1.1] };
+  var CLS = { on: Q.get("cl") !== "off", lit: 1, a: 1, b: 1, t0: 0, dur: 0, rock: 1, r0: 1, r1: 1, rt0: 0, used: false };
+  CLS.lit = CLS.a = CLS.b = CLS.rock = CLS.r0 = CLS.r1 = CLS.on ? 1 : 0;
+  var CL_LIT = { value: CLS.lit }, CL_ROOMK = { value: 1 }, CL_WARMK = { value: CLS.lit };
+  /* the glass unlit: dusty rose / coral (his 02, 03, film v04: lit side
+     #cc5e44 .. #e26c4a, shaded #924435 .. #9e4436, in daylight), glossy */
+  /* through: opal glass is not paint; the room's light that falls on the
+     far side of a globe comes through it too, so unlit it reads lighter and
+     flatter than a painted ball would (direct, indirect: x the diffuse) */
+  /* The artist: "turned off color looks a bit to dull..". The first unlit
+     glass matched the photographs' SHADED side, which in this dim room
+     came out brick brown. Now: rosier (col), and lift: opal glass gathers
+     the room's light from all round and passes it on, so unlit it sits a
+     little above an opaque ball in the same light (x the glass's colour x
+     the room's level; light falling on it, not emission, never in the
+     glow); floor: the pale reflection along the lower edge; hi: the soft
+     highlights. Three steps to choose from, ?clstep=1 (a bit less), 2
+     (the default), 3 (a bit more); the first unlit pass was 0xff906e,
+     lift 0, floor 0.045, hi 0.5. */
+  var CL_OFF_STEPS = {
+    1: { col: 0xff8e70, lift: 0.08, floor: 0.08, hi: [0.6, 40] },
+    2: { col: 0xff8c72, lift: 0.17, floor: 0.11, hi: [0.7, 40] },
+    3: { col: 0xff8a74, lift: 0.28, floor: 0.14, hi: [0.8, 40] }
+  };
+  var CL_OFF = CL_OFF_STEPS[Q.get("clstep")] || CL_OFF_STEPS[2];
+  CL_OFF.rough = 0.16;
+  CL_OFF.refl = 0.6;
+  CL_OFF.through = [1.3, 1.8];
+
   function fixMaterials(obj, selfScale, warm) {
     var out = { glass: [], veneer: [], led: [] };
     var done = {};
@@ -1680,16 +1745,21 @@
           GLOBE.t = { value: new THREE.Vector4().fromArray(GLOBE.t0) };
           GLOBE.s = { value: new THREE.Vector2().fromArray(GLOBE.s0) };
           GLOBE.base = new THREE.Color(GLOBE.col).r * GLOBE.k;
+          /* (the colour, the roughness and the room's light are the glass
+             switched off: while it is lit they are multiplied away in the
+             shader, so the lit globe is exactly as it was) */
           var gm = new THREE.MeshStandardMaterial({
-            name: n, color: 0x000000, roughness: 1, metalness: 0, envMapIntensity: 0,
+            name: n, color: CL_OFF.col, roughness: CL_OFF.rough, metalness: 0, envMapIntensity: 0,
             emissive: GLOBE.col, emissiveIntensity: GLOBE.k
           });
-          var gU = { uClC: { value: new THREE.Vector3(CL.x, CL.y, CL.z) }, uGl: GLOBE.u, uGt: GLOBE.t, uGs: GLOBE.s };
+          var gU = { uClC: { value: new THREE.Vector3(CL.x, CL.y, CL.z) }, uGl: GLOBE.u, uGt: GLOBE.t, uGs: GLOBE.s, uLit: CL_LIT, uRoomK: CL_ROOMK };
           gm.onBeforeCompile = function (sh) {
             sh.uniforms.uClC = gU.uClC;
             sh.uniforms.uGl = gU.uGl;
             sh.uniforms.uGt = gU.uGt;
             sh.uniforms.uGs = gU.uGs;
+            sh.uniforms.uLit = gU.uLit;
+            sh.uniforms.uRoomK = gU.uRoomK;
             sh.uniforms.uGce = { value: CEIL }; /* the ceiling's height (set by the room before the lamp is drawn) */
             sh.vertexShader = sh.vertexShader
               .replace("#include <common>", "#include <common>\nvarying vec3 vGW;")
@@ -1697,10 +1767,14 @@
             /* lit opal glass is its own light: the lamp inside must not
                also floodlight it from ten centimetres */
             sh.fragmentShader = sh.fragmentShader
-              .replace("#include <common>", "#include <common>\nvarying vec3 vGW;\nuniform vec3 uClC;\nuniform vec4 uGl;\nuniform vec4 uGt;\nuniform vec2 uGs;\nuniform float uGce;\n#define GLOBE_OWN " + GLOBE.own.toFixed(3) + "\n")
+              .replace("#include <common>", "#include <common>\nvarying vec3 vGW;\nuniform vec3 uClC;\nuniform vec4 uGl;\nuniform vec4 uGt;\nuniform vec2 uGs;\nuniform float uGce;\nuniform float uLit;\nuniform float uRoomK;\n#define GLOBE_OWN " + GLOBE.own.toFixed(3) + "\n")
               .replace(
                 "#include <lights_fragment_end>",
-                "#include <lights_fragment_end>\nreflectedLight.directDiffuse *= 0.0;\nreflectedLight.directSpecular *= 0.0;\n"
+                /* lit: no light falls on it (as before); unlit: the room's
+                   light does, but never in the glow source */
+                "#include <lights_fragment_end>\nfloat gOffK = (1.0 - uLit) * (1.0 - gGlow);\n" +
+                  "reflectedLight.directDiffuse *= gOffK * " + CL_OFF.through[0].toFixed(2) + ";\nreflectedLight.directSpecular *= 0.0;\nreflectedLight.indirectDiffuse *= gOffK * " + CL_OFF.through[1].toFixed(2) + ";\nreflectedLight.indirectSpecular *= gOffK;\n" +
+                  "reflectedLight.indirectDiffuse += diffuseColor.rgb * uRoomK * " + CL_OFF.lift.toFixed(3) + " * gOffK;\n"
               )
               .replace(
                 "#include <emissivemap_fragment>",
@@ -1708,6 +1782,7 @@
                   /* 1 in the picture, glowDim's share in the glow source: so
                      the reflection is dimmed with the emission there */
                   "float gK = totalEmissiveRadiance.r / " + GLOBE.base.toFixed(5) + ";\n" +
+                  "float gGlow = step(gK, 0.99);\n" + /* 1 in the glow source */
                   "vec3 gN = normalize(inverseTransformDirection(normal, viewMatrix));\n" +
                   "vec3 gV = normalize(cameraPosition - vGW);\n" +
                   "float gNdv = clamp(dot(gN, gV), 0.0, 1.0);\n" +
@@ -1744,13 +1819,39 @@
                      Fresnel they drew a pale line round every globe) */
                   "vec3 gEnv = vec3(1.0, 0.42, 0.12) * 1.1 * gNear * smoothstep(0.1, 0.75, dot(gR, gIn)) * mix(0.35, 1.0, gEdge)\n" +
                   "  + vec3(0.30, 0.17, 0.09) * smoothstep(-0.1, 0.7, gR.y) + vec3(0.012, 0.010, 0.009);\n" +
-                  "gE += gEnv * gF * uGl.w * gK;\n" +
+                  "gE *= uLit;\n" + /* switched off it does not shine */
+                  "gE += gEnv * gF * uGl.w * gK * uLit;\n" +
                   /* a small soft glint: the brightest surface near the lamp
                      is the ceiling straight over it, lit by all sixteen; each
                      globe sees that patch from its own place, so the glint
                      sits a little differently on each */
                   "vec3 gTo = normalize(vec3(uClC.x, uGce, uClC.z) - vGW);\n" +
-                  "gE += vec3(1.0, 0.72, 0.52) * uGs.x * pow(max(dot(gR, gTo), 0.0), uGs.y) * gEdge * gK;\n" +
+                  "gE += vec3(1.0, 0.72, 0.52) * uGs.x * pow(max(dot(gR, gTo), 0.0), uGs.y) * gEdge * gK * uLit;\n" +
+                  /* SWITCHED OFF the glass reflects the room as it is: where
+                     each reflected ray meets the art wall (z = 0), the
+                     ceiling or the floor first, from this globe's own place
+                     (so no two globes show the same thing), under the
+                     room's light (uRoomK); toward the knot its unlit
+                     neighbours, dark coral. Never in the glow source. */
+                  "if (uLit < 0.999) {\n" +
+                  " float tC = gR.y > 1e-3 ? (uGce - vGW.y) / gR.y : 1e9;\n" +
+                  " float tF = gR.y < -1e-3 ? -vGW.y / gR.y : 1e9;\n" +
+                  " float tW = gR.z < -1e-3 ? -vGW.z / gR.z : 1e9;\n" +
+                  " vec3 gO = vec3(0.10, 0.09, 0.085);\n" + /* the far side of the room */
+                  " if (tW < tC && tW < tF) gO = vec3(0.62, 0.58, 0.53);\n" + /* the pale art wall */
+                  " else if (tC < tF) gO = vec3(0.50, 0.47, 0.43) * (0.6 + 0.4 * smoothstep(-6.0, -1.0, -tC));\n" + /* the ceiling, darker far off */
+                  " else if (tF < 1e8) gO = vec3(1.0, 0.9, 0.8) * " + CL_OFF.floor.toFixed(3) + ";\n" + /* the floor, lit by the room */
+                  " gO = mix(gO, vec3(0.20, 0.06, 0.045), gNear * smoothstep(0.2, 0.8, dot(gR, gIn)));\n" +
+                  " gE += gO * uRoomK * gF * " + CL_OFF.refl.toFixed(2) + " * (1.0 - uLit) * (1.0 - gGlow);\n" +
+                  /* and the room's soft light itself (roomSoft, from up and
+                     to the left, from the room side), as a broad soft
+                     highlight: an area some metres off, so it sits a little
+                     differently on each globe, and none where the reflected
+                     ray runs into the cluster */
+                  " vec3 gLs = normalize(uClC + vec3(-1.6, 2.9, 3.6) - vGW);\n" +
+                  " float gHi = pow(max(dot(gR, gLs), 0.0), " + CL_OFF.hi[1].toFixed(1) + ") * (1.0 - gNear * smoothstep(0.2, 0.7, dot(gR, gIn)));\n" +
+                  " gE += vec3(0.95, 0.9, 0.84) * " + CL_OFF.hi[0].toFixed(3) + " * gHi * uRoomK * (1.0 - uLit) * (1.0 - gGlow);\n" +
+                  "}\n" +
                   "totalEmissiveRadiance = gE;\n"
               );
           };
@@ -2174,7 +2275,7 @@
           continue;
         }
         RTU.uFP.value[i].set(fq[0][0], fq[0][1], fq[0][2], Math.max(1, RB.d - fq[0][2]));
-        if (i !== 3 || !RB.gfLive) RTU.uFC.value[i].setHex(fq[1]).multiplyScalar(fq[2]);
+        if (i !== 3 || !RB.gfLive) RTU.uFC.value[i].setHex(fq[1]).multiplyScalar(fq[2] * (i === 1 ? CLS.lit : 1));
       }
     }
     RTU.uRT.value.set(R.mottle, R.wave, R.ao.floor, R.ao.ceil);
@@ -2184,10 +2285,10 @@
       var b = R.bounce[i];
       if (b) {
         RTU.uBP.value[i].set(b[0][0], b[0][1], b[0][2], b[3]);
-        RTU.uBC.value[i].setHex(b[1]).multiplyScalar(b[2]);
+        RTU.uBC.value[i].setHex(b[1]).multiplyScalar(b[2] * (b[0][0] === X.cl ? CLS.lit : 1));
       } else RTU.uBC.value[i].setRGB(0, 0, 0);
     }
-    if (RT_CL) RT_CL.uCol.value.setHex(R.clCeil.color).multiplyScalar(R.clCeil.power * Math.PI);
+    if (RT_CL) RT_CL.uCol.value.setHex(R.clCeil.color).multiplyScalar(R.clCeil.power * Math.PI * CLS.lit);
     if (wallMat) {
       ceilMat.color.setHex(R.ceilCol);
       roomHemi.color.setHex(R.sky);
@@ -2814,6 +2915,216 @@
     return again;
   }
 
+  /* ---- BUBBLEGUM'S WALL SWITCH (state: CLS, CL_SW) ---- */
+  function clSet(on) {
+    CLS.on = on;
+    CLS.a = CLS.lit;
+    CLS.b = on ? 1 : 0;
+    CLS.dur = on ? CL_SW.on : CL_SW.off;
+    CLS.t0 = performance.now();
+    clUi();
+    invalidate();
+  }
+  /* a press: the rocker tips over (CL_SW.rock) and the light changes as it
+     lands; with motion off the rocker is simply in its other position */
+  function clClick(byHand) {
+    if (byHand) CLS.used = true;
+    var to = !CLS.on;
+    if (REDUCED) {
+      CLS.rock = CLS.r0 = CLS.r1 = to ? 1 : 0;
+      CLS.rt0 = 0;
+      clSet(to);
+      return;
+    }
+    if (CLS.rt0) return; /* already tipping */
+    CLS.r0 = CLS.rock;
+    CLS.r1 = to ? 1 : 0;
+    CLS.rt0 = performance.now();
+    invalidate();
+  }
+  /* per frame: true while something is still moving */
+  function clStep() {
+    var now = performance.now(), again = false, ez = function (x) { return 1 - (1 - x) * (1 - x); };
+    if (CLS.rt0) {
+      var k = (now - CLS.rt0) / 1000 / CL_SW.rock;
+      if (k >= 1) {
+        CLS.rock = CLS.r1;
+        CLS.rt0 = 0;
+        clSet(CLS.r1 > 0.5);
+      } else {
+        CLS.rock = CLS.r0 + (CLS.r1 - CLS.r0) * ez(k);
+        again = true;
+      }
+    }
+    if (CLS.t0) {
+      var kk = CLS.dur > 0 ? (now - CLS.t0) / 1000 / CLS.dur : 1;
+      if (kk >= 1) {
+        CLS.lit = CLS.b;
+        CLS.t0 = 0;
+      } else {
+        CLS.lit = CLS.a + (CLS.b - CLS.a) * ez(kk);
+        again = true;
+      }
+    }
+    CL_LIT.value = CL_WARMK.value = CLS.lit;
+    if (roomHemi) CL_ROOMK.value = roomHemi.intensity / LEVEL.hemi[1];
+    if (RIG.clRocker) RIG.clRocker.rotation.x = (CLS.rock * 2 - 1) * CL_SW.deg * RAD;
+    /* the lamp's light on ceiling and wall, its bounce, its share of the far walls */
+    if (typeof RTU !== "undefined" && RTU && ROOMT) {
+      if (RT_CL) RT_CL.uCol.value.setHex(ROOMT.clCeil.color).multiplyScalar(ROOMT.clCeil.power * Math.PI * CLS.lit);
+      for (var i = 0; i < 10; i++) {
+        var b = ROOMT.bounce[i];
+        if (b && b[0][0] === X.cl) RTU.uBC.value[i].setHex(b[1]).multiplyScalar(b[2] * CLS.lit);
+      }
+      if (RB && RB.far[1] && RTU.uFC && RTU.uFC.value[1]) RTU.uFC.value[1].setHex(RB.far[1][1]).multiplyScalar(RB.far[1][2] * CLS.lit);
+    }
+    return again;
+  }
+
+  /* The switch itself: an ordinary flush rocker switch, white, an 80 mm
+     square frame 9 mm proud of the wall with a 55 mm opening, the rocker
+     in it with a 1 mm dark gap all round, and a soft shadow on the wall
+     below it. Nothing glows; no cable (the lamp hangs from the ceiling). */
+  function clRoundRect(w, h, r) {
+    var sh = new THREE.Shape(), x = -w / 2, y = -h / 2;
+    sh.moveTo(x + r, y);
+    sh.lineTo(x + w - r, y);
+    sh.quadraticCurveTo(x + w, y, x + w, y + r);
+    sh.lineTo(x + w, y + h - r);
+    sh.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
+    sh.lineTo(x + r, y + h);
+    sh.quadraticCurveTo(x, y + h, x, y + h - r);
+    sh.lineTo(x, y + r);
+    sh.quadraticCurveTo(x, y, x + r, y);
+    return sh;
+  }
+  function buildClSwitch() {
+    if (RIG.clSwitch) return;
+    var g = new THREE.Group();
+    g.position.set(CL_SW.pos[0], CL_SW.pos[1], 0);
+    var white = new THREE.MeshStandardMaterial({ color: 0xf1efea, roughness: 0.38, metalness: 0, envMapIntensity: 0.06 });
+    var dark = new THREE.MeshStandardMaterial({ color: 0x3a3632, roughness: 0.9, envMapIntensity: 0 });
+    /* the frame: a rounded square with a square opening, bevelled */
+    var fs = clRoundRect(0.08, 0.08, 0.006);
+    fs.holes.push(clRoundRect(0.055, 0.055, 0.003));
+    var fg = new THREE.ExtrudeGeometry(fs, { depth: 0.006, bevelEnabled: true, bevelThickness: 0.002, bevelSize: 0.0015, bevelSegments: 3, curveSegments: 6 });
+    var frame = new THREE.Mesh(fg, white);
+    frame.position.z = 0.0005;
+    g.add(frame);
+    /* the box behind the opening, dark: the gap round the rocker */
+    var back = new THREE.Mesh(new THREE.PlaneGeometry(0.056, 0.056), dark);
+    back.position.z = 0.002;
+    g.add(back);
+    /* the rocker: pivots across its middle */
+    var piv = new THREE.Group();
+    piv.position.z = 0.004;
+    var rg = new THREE.ExtrudeGeometry(clRoundRect(0.0525, 0.0525, 0.0025), { depth: 0.0045, bevelEnabled: true, bevelThickness: 0.0015, bevelSize: 0.001, bevelSegments: 3, curveSegments: 5 });
+    var rocker = new THREE.Mesh(rg, white);
+    piv.add(rocker);
+    g.add(piv);
+    /* its soft shadow on the wall, a little below and to the right (the
+       room's soft light comes from up and to the left) */
+    var c = document.createElement("canvas");
+    c.width = c.height = 64;
+    var x2 = c.getContext("2d"), gr = x2.createRadialGradient(32, 32, 14, 32, 32, 32);
+    gr.addColorStop(0, "rgba(0,0,0,0.55)");
+    gr.addColorStop(1, "rgba(0,0,0,0)");
+    x2.fillStyle = gr;
+    x2.fillRect(0, 0, 64, 64);
+    var st = new THREE.CanvasTexture(c);
+    var shade = new THREE.Mesh(new THREE.PlaneGeometry(0.115, 0.115), new THREE.MeshBasicMaterial({ map: st, transparent: true, depthWrite: false, opacity: 0.55, fog: true }));
+    shade.position.set(0.003, -0.005, 0.0003);
+    shade.renderOrder = 1;
+    g.add(shade);
+    scene.add(g);
+    RIG.clSwitch = g;
+    RIG.clRocker = piv;
+    piv.rotation.x = (CLS.rock * 2 - 1) * CL_SW.deg * RAD;
+    clUiInit();
+  }
+
+  /* ---- the switch on screen: a short still press on it, as the pen's
+     knob (same thresholds: within 0.6 s, under 8 px, over its outline
+     grown to 44 px for a finger, 28 for a mouse), and a real button ---- */
+  var clBtn = null, clDn = null, clHov = false, clBox = null, clV = null;
+  function clSwHit(x, y, touch) {
+    var k = RIG.clSwitch;
+    if (!k || !camera || !canvas || !live || sheetOpen) return false;
+    if (!clBox) {
+      clBox = new THREE.Box3();
+      clV = new THREE.Vector3();
+    }
+    k.updateWorldMatrix(true, true);
+    clBox.setFromObject(k);
+    var r = canvas.getBoundingClientRect(), x0 = 1e9, y0 = 1e9, x1 = -1e9, y1 = -1e9;
+    for (var c = 0; c < 8; c++) {
+      clV.set(c & 1 ? clBox.max.x : clBox.min.x, c & 2 ? clBox.max.y : clBox.min.y, c & 4 ? clBox.max.z : clBox.min.z).project(camera);
+      if (clV.z > 1 || clV.z < -1) return false;
+      var sx = r.left + (clV.x + 1) / 2 * r.width, sy2 = r.top + (1 - clV.y) / 2 * r.height;
+      x0 = Math.min(x0, sx); x1 = Math.max(x1, sx); y0 = Math.min(y0, sy2); y1 = Math.max(y1, sy2);
+    }
+    var min = touch ? 44 : 28, pad = touch ? 10 : 4;
+    var cx = (x0 + x1) / 2, cy = (y0 + y1) / 2;
+    var hw = Math.max((x1 - x0) / 2 + pad, min / 2), hh = Math.max((y1 - y0) / 2 + pad, min / 2);
+    return Math.abs(x - cx) <= hw && Math.abs(y - cy) <= hh;
+  }
+  function clUi() {
+    root.classList.toggle("cl-off", !CLS.on);
+    if (clBtn) clBtn.setAttribute("aria-pressed", String(CLS.on));
+  }
+  function clPlace() {
+    if (!clBtn) return;
+    var narrow = G.narrow, host = narrow ? capTurn && capTurn.parentNode : hud;
+    if (!host) return;
+    if (clBtn.parentNode !== host) {
+      if (narrow) host.insertBefore(clBtn, capTurn);
+      else host.appendChild(clBtn);
+    }
+    var show = !!by.cl && (narrow ? capSt === by.cl : hudFor === by.cl);
+    clBtn.hidden = !show;
+    if (hud && !narrow && show) hud.classList.add("has-pen"); /* (the same strip as the pen's switch) */
+  }
+  function clUiInit() {
+    if (clBtn) return;
+    clBtn = document.createElement("button");
+    clBtn.type = "button";
+    clBtn.className = "pen-sw cl-sw";
+    clBtn.innerHTML = '<span class="pen-sw__dot" aria-hidden="true"></span><span class="pen-sw__l">Light</span>';
+    clBtn.setAttribute("aria-label", "Light: the switch on the wall");
+    clBtn.hidden = true;
+    clBtn.addEventListener("click", function () {
+      clClick(true);
+    });
+    clUi();
+    clPlace();
+    window.addEventListener("pointerdown", function (e) {
+      var t = e.target;
+      if (!live || (t && t.closest && t.closest(SOLID))) return;
+      if (e.pointerType === "mouse" && e.button !== 0) return;
+      clDn = { id: e.pointerId, x: e.clientX, y: e.clientY, t: performance.now(), touch: e.pointerType !== "mouse" };
+    }, { capture: true, passive: true });
+    window.addEventListener("pointermove", function (e) {
+      if (clDn && e.pointerId === clDn.id && Math.hypot(e.clientX - clDn.x, e.clientY - clDn.y) > 8) clDn = null;
+      if (e.pointerType === "mouse" && !e.buttons) {
+        var t = e.target, h = !(t && t.closest && t.closest(SOLID)) && clSwHit(e.clientX, e.clientY, false);
+        if (h !== clHov) {
+          clHov = h;
+          root.classList.toggle("cl-switch", h);
+        }
+      }
+    }, { capture: true, passive: true });
+    window.addEventListener("pointerup", function (e) {
+      var d = clDn;
+      clDn = null;
+      if (!d || e.pointerId !== d.id) return;
+      if (performance.now() - d.t > 600 || Math.hypot(e.clientX - d.x, e.clientY - d.y) > 8) return;
+      if (clSwHit(e.clientX, e.clientY, d.touch)) clClick(true);
+    }, { capture: true, passive: true });
+    window.addEventListener("pointercancel", function () {
+      clDn = null;
+    }, { capture: true, passive: true });
+  }
+
   /* The artist, later: "die Chromteile vom Stift wieder etwas mehr reflektieren
      lassen": about half way back toward the mirror finish. Was color 0x8c8782,
      roughness 0.34, env 0.62, direct 0.35, face [0.78, 0.76, 0.74]. */
@@ -3140,6 +3451,7 @@
        warm light from all round (WARM), so the centre can be seen from
        outside, through the gaps. */
     var WARM = [1.15, 0.56, 0.25];
+    WARM.k = CL_WARMK; /* (the switch: CLS) */
     fixMaterials(model, 0.004, WARM);
     var top = partsParent(model); /* BUBBLEGUM-root: millimetres */
 
@@ -3365,6 +3677,8 @@
     /* (seen from below, through the cluster: kept faint and wide, or it
        turns to fog) */
     hazeAt(light, 0xff8e46, 0.004, 1.5, 0.7);
+    HAZE.list[HAZE.list.length - 1].f = function () { return CLS.lit; }; /* off, there is no light in the air */
+    buildClSwitch();
 
     var Y = new THREE.Vector3(0, 1, 0);
     var v = new THREE.Vector3(), w = new THREE.Vector3();
@@ -3412,8 +3726,8 @@
           cGeo.attributes.position.needsUpdate = true;
           cGeo.attributes.normal.needsUpdate = true;
         }
-        light.intensity = 6.0 * (0.12 + 0.88 * e * e);
-        uCord.value.set(Math.max(0.21, (r + GC) / 1000), 0.12 + 0.88 * e * e);
+        light.intensity = 6.0 * (0.12 + 0.88 * e * e) * CLS.lit;
+        uCord.value.set(Math.max(0.21, (r + GC) / 1000), (0.12 + 0.88 * e * e) * CLS.lit);
         if (ROOMT && ROOMT.clLight) light.intensity *= ROOMT.clLight; /* the test room */
     };
     /* for checking (window.__rooms.clCheck): every globe's direction and
@@ -3467,7 +3781,7 @@
     /* name after EMIT_: [emissive colour, intensity, share of the glow] */
     filament: [0xff932c, 9.5, 0.5], /* bright, with a tight bloom: the coil stays a coil */
     steps: [0xffa957, 3.4, 0.8],
-    led: [0xffdcb6, 4.2, 0.4], /* SR01's tape: warm white, 3000 K, and a tight bloom */
+    led: [0xffdcb6, 4.2, 1], /* SR01's tape: warm white, 3000 K, and a tight bloom */
     seam: [0xffcf98, 1.05, 0.4],
     bulb: [0xffa757, 6, 1]
   };
@@ -3824,15 +4138,35 @@
   var SR_BIRCH_GLOW = [0.62, 0.58, 0.56];
   var SR_BIRCH_TINT = 0xe0e6f0; /* the birch face texture is the chair's, warmer than this lamp's board: tinted back to its pale cream (was 0xf4ecdf; the photo pass set 0xeef5ff; the artist then: "das holz kann ein ganz kleines bisschen dunkler werden", so 6 % down) */
   var SR_RIM_LIT = 6;
-  /* THE INSIDE (notes/photo-lr01.md, "The inside"): the box is white inside;
-     SR_INSIDE_LIT: how much more of the glow its inner faces take (the tape
-     is centimetres away; was 6 on the birch); the take-apart: how far the
-     LED carrier (frame, wedges, tape) comes out of the box, and how far
-     the wedges then step off the frame (m). */
-  var SR_INSIDE_WHITE = 0xe8e6e0;
-  var SR_INSIDE_LIT = 6;
-  var SR_CARRIER_OUT = 0.2;
-  var SR_WEDGES_OFF = 0;
+  /* THE INSIDE (notes/photo-lr01.md, "The inside", third pass): all of it
+     birch multiplex like the outside, nothing white; the frame open.
+     SR_INSIDE_LIT: how much more of the glow the box's inner faces and the
+     back board take (the tape is centimetres away); SR_INSIDE_OUT: that
+     light once the carrier is out; the take-apart of the LED carrier
+     (open frame, wedges, tape): out of the box (m), aside (m), the turn
+     toward the visitor and the tip (deg), about a pivot (m off the wall). */
+  var SR_INSIDE_LIT = [6, 5.1, 4.0]; /* r, g, b: the tape's warm light (was 6 on all three) */
+  var SR_INSIDE_OUT = 0.3; /* the inside's light once the carrier is out (share of its light at rest) */
+  var SR_CARRIER_OUT = 0.3;
+  var SR_CARRIER_SIDE = 0.08; /* m toward the room's right as it turns, clear of the box's edge */
+  var SR_CARRIER_PIVOT = 0.068; /* m off the wall: the middle of the carrier's depth */
+  var SR_CARRIER_TURN = 50; /* deg, about the vertical, toward the room's right where both views stand */
+  var SR_CARRIER_TIP = 6; /* deg, its top toward the visitor */
+  /* THE TAPE (srTape): chip pitch along it (m), how bright the strip
+     glows between the chips (share of the chips'), and the light's colour
+     and strength: warm white, not clipped to white (in v06 the lit rows are
+     warm white with an amber cast) */
+  var SR_TAPE = { pitch: 0.0167, chip: 0.3, between: 0.9, color: 0xffc27a, power: 6 };
+  /* THE CARRIER'S PLYWOOD (open frame, wedges): the tape's warm light on
+     it once it is out of the box (multiplies its colour; 1 at rest, where
+     it is under the steel and unseen) */
+  var SR_TRAY = { lit: [1.6, 1.3, 0.95] };
+  /* the box's inside once the steel is off and the tape shines straight
+     into it (v06 3-6 s: flooded, amber toward its edges): its colour
+     multiplied by this (at rest, under the steel, it is 1, as published) */
+  var SR_INSIDE_OPEN = [0.7, 0.45, 0.2];
+
+  var SR_POSE = null; /* (checking only: __rooms.srPose) */
   var srSpotU = null;
   function srSpotApply() {
     if (!srSpotU) return;
@@ -3876,6 +4210,36 @@
       return prevKey + "|srspot";
     };
     mat.needsUpdate = true;
+  }
+  function srTape(m) {
+    /* two canvases, one tile = one chip: the tape as it is (white strip,
+       pale yellow chip: v06 7-10 s, lamp off) and as it shines (chips full,
+       the strip between them SR_TAPE.between) */
+    function tile(bg, chip) {
+      var c = document.createElement("canvas"), W = 64, H = 16;
+      c.width = W;
+      c.height = H;
+      var g = c.getContext("2d"), cw = Math.round(W * SR_TAPE.chip), ch = 6;
+      g.fillStyle = bg;
+      g.fillRect(0, 0, W, H);
+      g.fillStyle = chip;
+      g.fillRect((W - cw) / 2, (H - ch) / 2, cw, ch);
+      var t = new THREE.CanvasTexture(c);
+      t.colorSpace = THREE.SRGBColorSpace;
+      t.wrapS = THREE.RepeatWrapping;
+      t.repeat.set(1 / SR_TAPE.pitch, 1);
+      t.anisotropy = aniso();
+      return t;
+    }
+    var bv = Math.round(255 * SR_TAPE.between);
+    var look = tile("#f4f2ec", "#c9a640"), shine = tile("rgb(" + bv + "," + bv + "," + bv + ")", "#fff");
+    m.map = look;
+    m.emissiveMap = shine;
+    m.emissive = new THREE.Color(SR_TAPE.color);
+    m.emissiveIntensity = SR_TAPE.power;
+    m.color.setHex(0xffffff);
+    m.userData.srTape = { look: look, shine: shine };
+    m.needsUpdate = true;
   }
   async function buildSR(Loader) {
     var PZ = SR_PZ, PW = 5.2, x0 = X.sr - PW / 2, x1 = X.sr + PW / 2, y0 = 0.076, yc = 1.5;
@@ -3928,7 +4292,7 @@
     g.position.set(X.sr, yc, PZ);
     scene.add(g);
     var at = new THREE.Vector3(X.sr, yc, PZ + 0.092);
-    var parts = [], core = false;
+    var parts = [], core = false, carr = [], carrier = null, srInside = [], srTray = null, srInK = null, tPlyC = false;
     if (has("sr01")) {
       var got = await Promise.all([loadModel(Loader, "media/models/sr01.glb"), extraTex("sr01-steel-var"), extraTex("sr01-steel-alb"), extraTex("birch-ply-face")]);
       var model = prepGLB(got[0].scene, 0.0025), tVar = got[1], tAlb = got[2], tPly = got[3];
@@ -3978,54 +4342,90 @@
       tame(ply, 0.0025, 1.0, GLOW_BACK);
       var rim = new THREE.MeshStandardMaterial({ name: "MAT-birch_ply_edge", map: plies(13, 1), roughness: 0.66, envMapIntensity: 0.03 });
       tame(rim, 0.0025, 1.0, GLOW_BACK.map(function (v) { return v * SR_RIM_LIT; }));
-      /* THE INSIDE OF THE BOX IS WHITE (the artist: "wenn die led streifen
-         aus der box gehen ist das innere nicht mehr holz sondern weiß"):
-         the four inner faces (a skin in the model, SR01-body_inside), the
-         back board, and the smaller frame in the middle (white like the
-         box in his film: an estimate, see notes/photo-lr01.md). */
-      var white = new THREE.MeshStandardMaterial({ name: "MAT-white_inside", color: SR_INSIDE_WHITE, roughness: 0.75, envMapIntensity: 0.04 });
-      white.vertexColors = true;
-      tame(white, 0.0025, 1.0, GLOW_BACK);
+      /* EVERYTHING INSIDE IS BIRCH MULTIPLEX, like the outside (the artist:
+         "die Teile innen sind wie außen auch Multiplex und nichts ist weiß!
+         Der innere Frame ist nicht ausgefüllt!"): the box's inner faces, the
+         back board, the open frame and the wedges; only the steel and the
+         tape are not plywood. The body and the back keep the published
+         ply material (`ply`), so the box looks exactly as before at rest;
+         the carrier (frame, wedges) has its own instance, lit warm by its
+         tape once it is out (SR_TRAY.lit). */
+      var plyC = new THREE.MeshStandardMaterial({ name: "MAT-birch_ply", map: ply.map, color: tPly ? SR_BIRCH_TINT : 0xe9e0d0, roughness: 0.6, envMapIntensity: 0.04 });
+      tame(plyC, 0.0025, 1.0, GLOW_BACK);
+      srTray = plyC;
+      tPlyC = !!tPly;
+      ply.vertexColors = true;
       model.traverse(function (o) {
         if (!o.isMesh) return;
-        var n = o.name, mn = (o.material && o.material.name) || "", m, d = 0, t0 = 0, d2 = 0, t2 = 0;
+        var n = o.name, mn = (o.material && o.material.name) || "", m, d = 0, t0 = 0;
         if (/raw_steel/.test(mn) || /SR01-panel/.test(n)) o.material = steel;
         else if (/birch_ply_edge/.test(mn)) o.material = rim;
-        else if (/birch_ply/.test(mn)) o.material = ply;
-        else if (/white_inside/.test(mn)) {
-          o.material = white;
+        else if (/SR01-(frame|wedge)/.test(n)) o.material = plyC;
+        else if (/birch_ply/.test(mn)) {
+          o.material = ply;
           /* THE INSIDE OF THE BODY IS LIT HARD by the tape a few
              centimetres away; the outside only by the wall's glow. Seen
              through the 18 mm slot, that lit inside is the razor-thin bright
-             line along the steel's edge in his photographs. The box's inner
-             faces and the back board's front take SR_INSIDE_LIT times the
-             light; the frame, which the tape faces away from, does not. */
-          var gp = o.geometry.attributes.position, gn = o.geometry.attributes.normal, col = new Float32Array(gp.count * 3);
+             line along the steel's edge in his photographs. The faces that
+             look inward (and the back board's front) take SR_INSIDE_LIT
+             times the light; srInside keeps them, so the take-apart can
+             change it (steel off: flooded; carrier out: far less). */
+          var gp = o.geometry.attributes.position, gn = o.geometry.attributes.normal, col = new Float32Array(gp.count * 3), idx = [];
           for (var vi = 0; vi < gp.count; vi++) {
-            var inward = /SR01-back/.test(n) ? gn.getZ(vi) > 0.5 : /SR01-body_inside/.test(n) && gn.getX(vi) * gp.getX(vi) + gn.getY(vi) * gp.getY(vi) < -0.05;
-            col[vi * 3] = col[vi * 3 + 1] = col[vi * 3 + 2] = inward ? SR_INSIDE_LIT : 1;
+            var inward = /SR01-back/.test(n) ? gn.getZ(vi) > 0.5 : gn.getX(vi) * gp.getX(vi) + gn.getY(vi) * gp.getY(vi) < -0.05;
+            if (inward) idx.push(vi);
+            col[vi * 3] = inward ? SR_INSIDE_LIT[0] : 1;
+            col[vi * 3 + 1] = inward ? SR_INSIDE_LIT[1] : 1;
+            col[vi * 3 + 2] = inward ? SR_INSIDE_LIT[2] : 1;
           }
-          o.geometry.setAttribute("color", new THREE.BufferAttribute(col, 3));
+          var ca = new THREE.BufferAttribute(col, 3);
+          o.geometry.setAttribute("color", ca);
+          srInside.push({ a: ca, idx: idx });
         }
         /* THE TAKE-APART (media/models/sr01.md): the steel first (0.48),
-           then the LED carrier, the frame with its wedges and tape, comes out
-           of the box as one piece (SR_CARRIER_OUT), and last the wedges with
-           their tape step off the frame (SR_WEDGES_OFF), so the frame, the
-           wedges and the strips each read; the box, white inside, stays on
-           the wall. */
-        if (/panel/.test(n)) d = 0.48;
-        else if (/SR01-frame/.test(n)) {
-          d = SR_CARRIER_OUT;
-          t0 = 0.3;
-          core = true;
-        } else if ((m = /(?:wedge|led)_(\d+)/.exec(n))) {
-          d = SR_CARRIER_OUT;
-          t0 = 0.3;
-          d2 = SR_WEDGES_OFF;
-          t2 = 0.6;
+           then the LED carrier, the open frame with its wedges and tape,
+           comes out of the box as one glued piece and turns toward the
+           visitor (carrier, below); the box stays on the wall. */
+        if (/panel/.test(n)) {
+          d = 0.48;
+          RIG.srPanel = o;
+        } else if (/SR01-(frame|wedge|led)/.test(n)) {
+          carr.push(o);
+          if (/SR01-frame$/.test(n)) core = true;
         }
-        if (d) parts.push({ o: o, z: o.position.z, d: d, t0: t0, d2: d2, t2: t2 });
+        if (d) parts.push({ o: o, z: o.position.z, d: d, t0: t0 });
       });
+      /* THE TAPE (v06, 7-10 s, lamp off): white strip with small chips about
+         every 17 mm (an estimate from the film); lit, the chips blaze and
+         the strip between them glows warm (srTape()). */
+      var ledMat = null;
+      model.traverse(function (o) {
+        if (o.isMesh && /SR01-led/.test(o.name)) ledMat = o.material;
+      });
+      if (ledMat) srTape(ledMat);
+      RIG.srTape = ledMat;
+      /* THE TAPE'S BLOOM IS ITS OWN: it may lie over the plywood next to it
+         (the back board, the frame, the wedges), as in v06 3-6 s where the
+         rows blaze; so those parts are blockers (they still hide any tape
+         behind them; at rest, under the steel, nothing of them shows). The
+         box itself and the steel stay occluders: as blockers the box's sides
+         took the room's other glow at rest, which changed the published
+         look. */
+      model.traverse(function (o) {
+        if (!o.isMesh || !/SR01-(back|frame|wedge)/.test(o.name)) return;
+        var oi = occluders.indexOf(o);
+        if (oi >= 0) occluders.splice(oi, 1);
+        asBlocker(o);
+      });
+      /* the carrier on its own pivot: at rest it is exactly where the file
+         puts it */
+      if (carr.length) {
+        carrier = new THREE.Group();
+        carrier.position.set(0, 0, SR_CARRIER_PIVOT);
+        model.add(carrier);
+        carrier.updateMatrixWorld(true);
+        for (var ci = 0; ci < carr.length; ci++) carrier.attach(carr[ci]);
+      }
     } else {
       var ply0 = std(0xd6bd92, 0.7);
       tame(ply0, 0.0025, 1.0);
@@ -4053,15 +4453,47 @@
       RIG.sr = function (ex) {
         for (var i = 0; i < parts.length; i++) {
           var p = parts[i];
-          p.o.position.z = p.z + p.d * sstep(ex, p.t0, p.t0 + 0.36) + p.d2 * sstep(ex, p.t2, p.t2 + 0.36);
+          p.o.position.z = p.z + p.d * sstep(ex, p.t0, p.t0 + 0.36);
+        }
+        /* the carrier: out of the box, then a calm turn toward the visitor
+           (both views stand to the right of the lamp), so its front, the
+           frame's rim and the four stepped rows of tape round it, faces the
+           eye instead of being seen edge-on */
+        var cOut = sstep(ex, 0.3, 0.66), cTurn = sstep(ex, 0.5, 0.9), off = sstep(ex, 0.02, 0.5);
+        /* with the tape gone from it, the box's inside takes far less of its
+           light: a warm white, no longer a blown white card */
+        /* the box's inside: SR_INSIDE_LIT at rest (as published); with the
+           steel off and the tape shining straight into it, amber
+           (SR_INSIDE_OPEN); with the carrier out, far less (SR_INSIDE_OUT) */
+        var kOpen = off * (1 - cOut), kOut = lerp(1, SR_INSIDE_OUT, cOut);
+        var kr = SR_INSIDE_LIT[0] * kOut * lerp(1, SR_INSIDE_OPEN[0], kOpen), kg = SR_INSIDE_LIT[1] * kOut * lerp(1, SR_INSIDE_OPEN[1], kOpen), kb = SR_INSIDE_LIT[2] * kOut * lerp(1, SR_INSIDE_OPEN[2], kOpen);
+        var key = kr.toFixed(3) + kg.toFixed(3) + kb.toFixed(3);
+        if (key !== srInK) {
+          srInK = key;
+          for (var si = 0; si < srInside.length; si++) {
+            var sa = srInside[si];
+            for (var sj = 0; sj < sa.idx.length; sj++) sa.a.setXYZ(sa.idx[sj], kr, kg, kb);
+            sa.a.needsUpdate = true;
+          }
+        }
+        if (srTray) {
+          srTray.color.setHex(tPlyC ? SR_BIRCH_TINT : 0xe9e0d0);
+          srTray.color.r *= lerp(1, SR_TRAY.lit[0], cOut);
+          srTray.color.g *= lerp(1, SR_TRAY.lit[1], cOut);
+          srTray.color.b *= lerp(1, SR_TRAY.lit[2], cOut);
+        }
+        if (carrier) {
+          carrier.position.z = SR_CARRIER_PIVOT + SR_CARRIER_OUT * cOut;
+          carrier.position.x = SR_CARRIER_SIDE * cTurn;
+          carrier.rotation.y = SR_CARRIER_TURN * RAD * cTurn;
+          carrier.rotation.x = -SR_CARRIER_TIP * RAD * cTurn;
         }
         /* the steel is what throws the light back onto the wall: as it
            comes away the wash widens and thins, and the bare tape lights
            the room in front instead */
-        var off = sstep(ex, 0.02, 0.5);
         HU.uGain.value = lerp(1, 0.5, off);
         HU.uSpread.value = lerp(0.3, 0.52, off);
-        l.position.z = lz + SR_CARRIER_OUT * sstep(ex, 0.3, 0.66) + SR_WEDGES_OFF * sstep(ex, 0.6, 0.96); /* the light goes with the LEDs */
+        l.position.z = lz + SR_CARRIER_OUT * cOut; /* the light goes with the LEDs */
         l.intensity = lerp(0.3, 1.5, off);
         S.uCol.value.copy(spillCol).multiplyScalar(lerp(1, 1.7, off));
       };
@@ -4101,16 +4533,25 @@
          light, stood off the wall where the face throws it).
      Deep and saturated, nowhere near clipping, hardly any bloom. */
   var BX = { y: 1.45, glow: 1.75 }; /* (1.4 with the daytime face; the artist: brighter) */
-  /* THE COLOUR OF HIS FILMS (photo pass). The face's picture was cut from
-     his film of the box on the wall (IMG_4101, the site's v03) without
-     converting it from HDR (HLG), which leaves a film pale and yellow; the
-     same film converted properly shows a deep, saturated orange (face mean
-     about 210,118,6, the grain a redder 190,75,3), and so do his other
-     films of it lit (v04, v05). So the light through the veneer is that
-     orange now, and a little less of it. ?box=a shows the colour it had
-     before (the pale amber of the unconverted frame), to compare. */
-  var BXA = /[?&]box=a(&|$)/i.test(location.search);
-  if (!BXA) BX.glow = 1.4;
+  /* THE COLOUR OF THE LIGHT (photo pass, second round). The first round
+     matched his night film converted from HDR (deep orange, face about
+     210,118,6): a dark room in which the phone exposes long and saturates.
+     The artist, who knows the object: brighter, and too orange. His day
+     films of the same box (v05 lit on the wall, face about 212,154,18; v05
+     in the evening, 213,161,13), the floor film (v04, 230,158,67) and
+     04.jpg (224,153,55) are a bright golden orange, yellow in the middle,
+     deeper toward the edges. Three steps, ?box=a|b|c, b the default:
+       a  a bit more orange  (front on, here: about 236,150,52)
+       b  golden orange      (about 238,162,58)
+       c  paler and brighter (about 240,175,68)
+     (before this pass: 242,188,80 pale amber; first round: 235,135,50) */
+  var BXK = (/[?&]box=([abc])(&|$)/i.exec(location.search) || [0, "b"])[1].toLowerCase();
+  var BXC = {
+    a: { tint: [1.0, 0.38, 0.06], gam: [1.0, 1.3, 2.2], glow: 1.55 },
+    b: { tint: [1.0, 0.44, 0.08], gam: [1.0, 1.2, 2.0], glow: 1.7 },
+    c: { tint: [1.0, 0.5, 0.14], gam: [1.0, 1.12, 1.8], glow: 1.85 }
+  }[BXK];
+  BX.glow = BXC.glow;
 
   function dayFace(img, noFlip, upright) {
     var S = Math.min(1400, img.naturalWidth || 1400), c = document.createElement("canvas");
@@ -4161,6 +4602,67 @@
     return t;
   }
 
+  /* THE CASE SIDE, AT ITS TRUE SIZE (photo pass, third round). In his day
+     film (v05, off and on) the sides are the face of a birch plywood strip:
+     a smooth, pale, almost even surface, the grain so fine it hardly shows
+     from a few metres; no plies to be seen (the cut edges are behind the
+     veneer face and against the wall). The room's general birch
+     (birchTexture: 1.3 m across, hand-wide bands, cathedral arches) was
+     stretched over these 10 cm deep sides, so a sliver of it showed as
+     coarse streaks and blotches. This one covers 0.2 m: fine straight grain
+     along the strip's length (u is the depth, v along the strip), a few
+     soft bands a centimetre or two wide, all of it low in contrast; no
+     bump. It tiles both ways. */
+  var bxSideT = null;
+  function boxSideTexture() {
+    if (bxSideT) return bxSideT;
+    var c = noiseCanvas(512, function (g, S) {
+      g.fillStyle = "#f1e7d3";
+      g.fillRect(0, 0, S, S);
+      var i, x, k, y;
+      /* soft bands (late and early wood seen flat), 0.4-2.3 cm wide */
+      for (i = 0; i < 26; i++) {
+        x = hash(i * 9.7 + 1) * S;
+        var w = 10 + hash(i * 4.3) * 50, d = hash(i * 6.1) > 0.5 ? "176,146,104" : "255,250,236";
+        for (k = -1; k <= 1; k++) {
+          var lg = g.createLinearGradient(x + k * S - w, 0, x + k * S + w, 0);
+          lg.addColorStop(0, "rgba(" + d + ",0)");
+          lg.addColorStop(0.5, "rgba(" + d + "," + (0.025 + hash(i) * 0.035) + ")");
+          lg.addColorStop(1, "rgba(" + d + ",0)");
+          g.fillStyle = lg;
+          g.fillRect(x + k * S - w, 0, w * 2, S);
+        }
+      }
+      /* fine grain: hairlines along the strip, a gentle wave that tiles */
+      for (i = 0; i < 420; i++) {
+        x = hash(i * 1.37 + 3) * S;
+        var amp = (hash(i * 2.11) - 0.5) * 5, ph = hash(i * 4.7) * 6.283, a = 0.02 + hash(i * 3.3) * 0.045;
+        g.strokeStyle = "rgba(" + ((150 + hash(i) * 30) | 0) + "," + ((118 + hash(i + 7) * 24) | 0) + ",80," + a + ")";
+        g.lineWidth = 0.6 + hash(i * 5.1) * 0.9;
+        for (k = -1; k <= 1; k++) {
+          g.beginPath();
+          for (y = 0; y <= S; y += 16) {
+            var px = x + k * S + amp * Math.sin((y / S) * 6.283 * 2 + ph);
+            if (y === 0) g.moveTo(px, y);
+            else g.lineTo(px, y);
+          }
+          g.stroke();
+        }
+      }
+      /* birch's small dark flecks, sparse */
+      for (i = 0; i < 70; i++) {
+        g.fillStyle = "rgba(120,92,58," + (0.04 + hash(i * 2.9) * 0.06) + ")";
+        g.fillRect(hash(i * 3.3 + 0.5) * S, hash(i * 7.1 + 9) * S, 1 + hash(i) * 1.2, 3 + hash(i * 1.7) * 6);
+      }
+    });
+    bxSideT = new THREE.CanvasTexture(c);
+    bxSideT.colorSpace = THREE.SRGBColorSpace;
+    bxSideT.wrapS = bxSideT.wrapT = THREE.RepeatWrapping;
+    bxSideT.repeat.set(5, 5); /* UVs in metres: 0.2 m per tile */
+    bxSideT.anisotropy = aniso();
+    return bxSideT;
+  }
+
   async function buildBox(Loader) {
     var g = new THREE.Group();
     g.position.set(X.bx, BX.y, 0);
@@ -4185,9 +4687,9 @@
        diffuser", and how bright that is; lamp: fuller over the two lamps /
        less at the edges / less again in the corners. */
     var U = {
-      bxGam: { value: BXA ? new THREE.Vector3(1.0, 1.05, 1.4) : new THREE.Vector3(1.0, 1.4, 2.2) },
+      bxGam: { value: new THREE.Vector3(BXC.gam[0], BXC.gam[1], BXC.gam[2]) },
       bxCon: { value: new THREE.Vector2(0.46, 0.6) },
-      bxTint: { value: BXA ? new THREE.Vector3(1.0, 0.55, 0.3) : new THREE.Vector3(1.0, 0.32, 0.05) },
+      bxTint: { value: new THREE.Vector3(BXC.tint[0], BXC.tint[1], BXC.tint[2]) },
       bxSeam: { value: new THREE.Vector3(0.09, 0.18, 1.15) }, /* (the old face's seam is white in the file: kept warm, below clipping) */
       bxLamp: { value: new THREE.Vector3(0.1, 0.07, 0.12) },
       /* (photo pass) core: how much fuller and yellower the light is over
@@ -4273,8 +4775,49 @@
          light of the box falls on them, only the orange that comes back off
          the room; under the room's cooler light the pale birch read as an
          olive grey band */
-      var ply = new THREE.MeshStandardMaterial({ name: "MAT-birch_ply", map: birchTexture(), color: BXA ? 0xe9e0d0 : 0xb48e68, roughness: 0.6, envMapIntensity: 0.05 });
-      tame(ply, 0.6, 0.8);
+      /* THE OUTSIDE IS PALE BIRCH (the artist: "the wood on the outside is
+         very bright, almost white"). His day film on the wall (v05): unlit,
+         the case sides are as light as the white wall beside them (side
+         175,133,89, wall 159,141,122), a pale cream birch; lit, about 0.9 of
+         the wall (134,66,32 against 149,85,68), warm from the light the
+         room gives back. Only his night film, in a room lit by nothing but
+         the box, shows them dark. The face's light never reaches them (they
+         face away from it): full room light (tame 1.0), and a warm term for
+         what the lit wall right beside them gives back (indirect, so no
+         glow, and it scales with the birch's own colour). Here the sides
+         now come out at about 0.9 of the wall beside them. (First round:
+         0xb48e68 under tame 0.6, a dark brown band; before: 0xe9e0d0 under
+         tame 0.6, olive grey.) */
+      var ply = new THREE.MeshStandardMaterial({ name: "MAT-birch_ply", map: boxSideTexture(), color: 0xf4ecdc, roughness: 0.62, envMapIntensity: 0.05 });
+      /* (third round) what tame(ply, 1, 1, warm) did, and three small
+         things that make it a board, all by the depth z (0 at the wall,
+         0.1 at the front): the wall's warm light given back is strongest
+         by the wall and falls off toward the front; a soft contact shadow
+         in the corner against the wall (the last 2-3 cm); and the front
+         arris, sanded round, a millimetre or two that catches a little more
+         of the room. Light falling on the board only: nothing here glows. */
+      ply.onBeforeCompile = function (sh) {
+        sh.vertexShader = sh.vertexShader
+          .replace("#include <common>", "#include <common>\nvarying float vBxZ;")
+          .replace("#include <project_vertex>", "#include <project_vertex>\nvBxZ = ( modelMatrix * vec4( transformed, 1.0 ) ).z;");
+        sh.fragmentShader = sh.fragmentShader
+          .replace("#include <common>", "#include <common>\nvarying float vBxZ;")
+          .replace(
+            "#include <lights_fragment_end>",
+            "#include <lights_fragment_end>\n" +
+              "{ float bz = clamp( vBxZ / 0.1, 0.0, 1.0 );\n" +
+              "  reflectedLight.directDiffuse = min( reflectedLight.directDiffuse, vec3( 1.0 ) );\n" +
+              "  reflectedLight.directSpecular = min( reflectedLight.directSpecular, vec3( 1.0 ) );\n" +
+              "  reflectedLight.indirectDiffuse += material.diffuseColor * vec3( 0.38, 0.15, 0.06 ) * ( 1.25 - 0.5 * bz );\n" +
+              "  float ao = mix( 0.84, 1.0, smoothstep( 0.0, 0.2, bz ) );\n" +
+              "  float ar = smoothstep( 0.975, 0.995, bz );\n" +
+              "  reflectedLight.directDiffuse *= ao * ( 1.0 + 0.18 * ar );\n" +
+              "  reflectedLight.indirectDiffuse *= ao * ( 1.0 + 0.18 * ar ); }\n"
+          );
+      };
+      ply.customProgramCacheKey = function () {
+        return "bxside3";
+      };
       RIG.bxPly = ply;
       var cut = new THREE.MeshStandardMaterial({ name: "MAT-birch_ply_edge", map: plyEdgeTexture(1), color: 0xd8cdbb, roughness: 0.7, envMapIntensity: 0.03 });
       tame(cut, 0.25, 0.7); /* the rim is in the plane of the face: the face does not light it */
@@ -4390,7 +4933,7 @@
 
     /* The whole face is the source and it faces the room, so its light is
        stood well off the wall: floor and ceiling take it. */
-    var l = new THREE.PointLight(BXA ? 0xff8c38 : 0xff7a26, 1.4, 0, 2); /* (1.15 before the face was brightened) */
+    var l = new THREE.PointLight(0xff822e, 1.4, 0, 2); /* (1.15 before the face was brightened) */
     l.position.set(X.bx, 1.35, 1.25);
     scene.add(l);
     /* ...and what comes back off the room and off the box's own edges lies
@@ -4406,7 +4949,7 @@
        slowly (its range, 3.4 m, ends it at the patch's ends, 3.2 m either
        side, with no step): a broad warm wash, a little fuller round
        the box, the face standing clear of it. */
-    var S = localLight({ pos: [X.bx, BX.y, 1.25], color: BXA ? 0xff8a32 : 0xff7a2c, power: 0.36, decay: 1.2, range: 3.4 });
+    var S = localLight({ pos: [X.bx, BX.y, 1.25], color: 0xff822e, power: 0.36, decay: 1.2, range: 3.4 });
     patch(S, "wall", X.bx - 3.2, X.bx + 3.2, 0, CEIL);
     patch(S, "skirt", X.bx - 3.2, X.bx + 3.2);
     RIG.bxL = l;
@@ -8999,7 +9542,7 @@
     nPose++;
     if (RIG.pen) RIG.pen(actW(by.pen, "apart"));
     if (RIG.cl) RIG.cl(T.gather, actW(by.cl, "knot"), spinAuto + by.cl.hand.yaw * RAD);
-    if (RIG.sr) RIG.sr(actW(by.sr, "apart"));
+    if (RIG.sr) RIG.sr(SR_POSE != null ? SR_POSE : actW(by.sr, "apart"));
 
 
     if (RIG.gf && by.gf) RIG.gf(by.gf.turn || 0, by.gf.hue || 0);
@@ -9044,6 +9587,7 @@
     var again = false, i;
     if (gfStep(dt)) again = true; /* the torch's colour and the ball's slow turn */
     if (penStep()) again = true; /* the pen's knob and its light */
+    if (clStep()) again = true; /* Bubblegum's wall switch and its light */
 
     /* scroll: followed exactly with motion off (it only ever causes a cut
        there), eased a little with motion on so the camera glides */
@@ -9671,6 +10215,7 @@
       live = false;
       root.classList.remove("gl"); /* the stills come back */
       root.classList.remove("gl-soon");
+      loadDone("lost");
     });
 
     if (TUNING) TUNE = makeTune();
@@ -9701,6 +10246,21 @@
       /* for checking: where the camera stands now */
       peek: function (pos, at) {
         RB_PEEK = pos ? [pos, at] : null;
+        invalidate();
+      },
+      /* for checking LR01's inside: force its take-apart to ex (null: as
+         the page drives it) and show or hide the steel */
+      srPose: function (ex, steel, tapeOff) {
+        SR_POSE = ex;
+        if (RIG.srPanel) RIG.srPanel.visible = steel !== false;
+        var tp = RIG.srTape;
+        if (tp && tp.userData.srTape) {
+          /* off: the tape shown as it is by daylight (its own look as the
+             emissive, neutral), for comparing with the film only */
+          tp.emissiveMap = tapeOff ? tp.userData.srTape.look : tp.userData.srTape.shine;
+          tp.emissive.setHex(tapeOff ? 0xffffff : SR_TAPE.color);
+          tp.emissiveIntensity = tapeOff ? 0.9 : SR_TAPE.power;
+        }
         invalidate();
       },
       camNow: function () {
@@ -9854,6 +10414,28 @@
       },
       /* the pen's veneer map, live: ven().u.value = (gain, mean green, contrast) */
       ven: function () { return VEN; },
+      /* Bubblegum's wall switch: state, its rect on screen; clSwitch(lit) sets it at once (for checking) */
+      clSwitch: function (lit) {
+        if (lit != null) {
+          CLS.on = lit > 0.5;
+          CLS.lit = CLS.a = CLS.b = CLS.rock = CLS.r0 = CLS.r1 = lit > 0.5 ? 1 : 0;
+          CLS.t0 = CLS.rt0 = 0;
+          clUi();
+          clStep();
+          invalidate();
+        }
+        var rr = null;
+        if (RIG.clSwitch && camera && canvas) {
+          var bb = new THREE.Box3().setFromObject(RIG.clSwitch), v = new THREE.Vector3(), cr = canvas.getBoundingClientRect(), xa = 1e9, ya = 1e9, xb = -1e9, yb = -1e9;
+          for (var c = 0; c < 8; c++) {
+            v.set(c & 1 ? bb.max.x : bb.min.x, c & 2 ? bb.max.y : bb.min.y, c & 4 ? bb.max.z : bb.min.z).project(camera);
+            var sx = cr.left + (v.x + 1) / 2 * cr.width, sy3 = cr.top + (1 - v.y) / 2 * cr.height;
+            xa = Math.min(xa, sx); xb = Math.max(xb, sx); ya = Math.min(ya, sy3); yb = Math.max(yb, sy3);
+          }
+          rr = [Math.round(xa), Math.round(ya), Math.round(xb), Math.round(yb)];
+        }
+        return { on: CLS.on, lit: CLS.lit, rock: CLS.rock, used: CLS.used, rect: rr };
+      },
       /* Bubblegum's glass, live: globe().u.value = (inner light, limb, edge, reflection) */
       globe: function () { return GLOBE; },
       /* the pen's switch, for checking: state, and where its knob is on
@@ -9904,6 +10486,46 @@
     };
     invalidate();
     lzNear();
+    loadReady();
+  }
+
+  /* LOADING: the first screen is right. The room is live and html.gl is on
+     (the page's layout changed to the room's scroll track under the
+     loading state); that change makes the ResizeObserver re-measure and
+     redraw (resize() draws at once); then nothing more to draw (dirty
+     false) and no new resize for a whole frame; fonts in. One frame more
+     for that picture to reach the screen, and the page is let go. A link
+     straight to a work or the index then lands as a click would
+     (LOAD.land): on a phone through jumpTo(), elsewhere the browser's own
+     scroll to the section. */
+  function loadReady() {
+    if (!LOAD) return;
+    LOAD.land = function (h) {
+      if (phoneOn()) {
+        /* where an index tap lands; the focus stays where it was, as it
+           does for any link into the page */
+        var a = document.activeElement;
+        jumpTo(h);
+        if (document.activeElement !== a && document.activeElement && document.activeElement.blur) document.activeElement.blur();
+      } else {
+        var el = document.getElementById(h.slice(1));
+        if (el) el.scrollIntoView();
+      }
+      invalidate();
+    };
+    var fonts = document.fonts && document.fonts.ready ? document.fonts.ready : Promise.resolve();
+    fonts.then(function () {
+      var rz = -1, calm = 0;
+      (function look() {
+        if (!live || G.tall || !root.classList.contains("gl")) return loadDone("none");
+        if (nResize !== rz || dirty) {
+          rz = nResize;
+          calm = 0;
+        } else calm++;
+        if (calm >= 2) return loadDone("live");
+        requestAnimationFrame(look);
+      })();
+    });
   }
 
   booting = true;
@@ -9912,5 +10534,6 @@
     if (window.console && console.warn) console.warn("rooms: 3D unavailable, showing stills.", err && err.message);
     root.classList.remove("gl");
     root.classList.remove("gl-soon");
+    loadDone("error");
   });
 })();

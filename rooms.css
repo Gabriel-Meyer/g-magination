@@ -354,8 +354,8 @@ html:not(.gl) .veil {
   color: var(--ink);
 }
 
-/* Motion on / off: always in reach, so the choice made at the entrance is
-   never final */
+/* Motion on / off: always in reach. Motion is on by default for everyone
+   (2026-11-13), so this switch is the one way to the still mode */
 .bar__motion {
   pointer-events: auto;
   font: inherit;
@@ -435,63 +435,6 @@ html.gl .work__still {
 
 .open__text {
   max-width: 660px;
-}
-
-/* the one question, asked once, only of a visitor whose system asks for
-   reduced motion */
-.ask {
-  display: none;
-  pointer-events: auto;
-  margin-left: auto;
-  width: min(100%, 372px);
-  padding: 20px 22px 22px;
-  border: 1px solid var(--line);
-  background: rgba(var(--scrim), 0.72);
-  -webkit-backdrop-filter: blur(14px);
-  backdrop-filter: blur(14px);
-}
-
-html[data-motion-ask] .ask {
-  display: block;
-}
-
-.ask__p {
-  margin-top: 12px;
-  font-size: 15.5px;
-  line-height: 1.48;
-  color: var(--soft);
-  text-wrap: pretty;
-}
-
-.ask__b {
-  margin-top: 18px;
-  display: flex;
-  flex-wrap: wrap;
-  gap: 10px;
-}
-
-.ask button {
-  font: inherit;
-  font-size: 11px;
-  letter-spacing: 0.16em;
-  text-transform: uppercase;
-  color: var(--ink);
-  background: none;
-  border: 1px solid var(--line);
-  border-radius: 999px;
-  padding: 11px 16px;
-  cursor: pointer;
-  white-space: nowrap;
-}
-
-.ask button:first-child {
-  color: #0a0908;
-  background: var(--ink);
-  border-color: var(--ink);
-}
-
-.ask button:hover {
-  border-color: var(--ink);
 }
 
 .open__h {
@@ -1172,7 +1115,8 @@ html:not(.gl) .hud {
   padding: 2px 0 0;
 }
 
-html.pen-knob .scene canvas {
+html.pen-knob .scene canvas,
+html.cl-switch .scene canvas {
   cursor: pointer;
 }
 
@@ -1227,35 +1171,13 @@ html[data-motion="reduced"] .hud {
     min-height: calc(var(--vh) * 1.3);
   }
 
-  /* on a phone the question sits at the head of the entrance, the title at
-     its foot, and the room between them */
+  /* on a phone the title sits at the foot of the entrance, the room above
+     it (the motion question that once sat at its head is gone, 2026-11-13) */
   .open__frame {
     flex-direction: column-reverse;
     align-items: stretch;
     justify-content: space-between;
     padding-top: calc(var(--bar) + 10px);
-  }
-
-  .ask {
-    width: 100%;
-    margin: 0;
-    padding: 14px 16px 16px;
-  }
-
-  .ask__p {
-    font-size: 14px;
-    margin-top: 8px;
-  }
-
-  .ask__b {
-    margin-top: 12px;
-    gap: 8px;
-  }
-
-  .ask button {
-    padding: 10px 13px;
-    font-size: 10.5px;
-    letter-spacing: 0.12em;
   }
 
   .bar__motion {
@@ -1577,8 +1499,7 @@ html[data-motion="reduced"] .hud {
     --capx: 20px;
   }
 
-  /* --- the entrance: the same composition; the motion question, when it
-     is asked, is a card at the foot, in reach of the thumb --- */
+  /* --- the entrance: the same composition --- */
   html.gl .open__desk {
     display: none;
   }
@@ -1592,31 +1513,6 @@ html[data-motion="reduced"] .hud {
     justify-content: flex-end;
     gap: 18px;
     padding-bottom: calc(22px + env(safe-area-inset-bottom));
-  }
-
-  html[data-motion-ask] .open__cue {
-    display: none;
-  }
-
-  html[data-motion-ask] .open__s {
-    margin-top: 16px;
-  }
-
-  .ask {
-    padding: 16px 16px 16px;
-    background: rgba(var(--scrim), var(--band-a));
-  }
-
-  .ask__b {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr);
-    gap: 8px;
-  }
-
-  .ask button {
-    min-height: 48px;
-    width: 100%;
-    font-size: 11px;
   }
 
   /* --- the header: every target 44 px --- */
@@ -1989,6 +1885,17 @@ html[data-motion="reduced"] .hud {
     margin-left: 0;
   }
 
+  /* with the switch in the row there is no room for three thumbnails and
+     the label: the dossier keeps one thumbnail, round, and its label whole
+     ("Photos, film & text") */
+  .cap__row:has(.pen-sw:not([hidden])) .cap__th img + img {
+    display: none;
+  }
+
+  .cap__row:has(.pen-sw:not([hidden])) .cap__th img {
+    border-radius: 999px;
+  }
+
   .cap__turn {
     flex: none;
     width: 44px;
@@ -2298,6 +2205,177 @@ html[data-motion="reduced"] .hud {
     color: var(--mute);
     pointer-events: auto;
   }
+}
+
+/* ============================================================
+   LOADING  (notes/loading.md; the head script's __roomsLoad; rooms3d.js
+   loadReady). Everything for the loading state is in this block.
+   - html.loading (head script: only where the room can come) puts .load
+     over the whole page and holds the scroll: no overflow, the scrollbar's
+     place kept (so nothing moves sideways when it comes back), and the
+     page behind is hidden from the pointer, the keyboard and screen
+     readers (visibility); the room's canvas and veil stay, so the room is
+     drawn under it.
+   - The mark: a line of the lamps' light that gathers and warms, slowly,
+     like a lamp coming up; the word under it. Both appear only after
+     0.35 s, so a quick start shows nothing but the dark of the entrance.
+   - Motion off: no animation; the line lit, still, and the word.
+   - html.load-out: the mark and the word go at once and the dark fades
+     away over the first screen (0.6 s; 0.2 s with motion off) while the
+     room's canvas fades in under it.
+   - Without JavaScript or without the room nothing here ever shows.
+   ============================================================ */
+
+html.loading {
+  overflow: hidden;
+  scrollbar-gutter: stable;
+  overscroll-behavior: none;
+}
+
+html.loading body > :not(.load):not(.load__say):not(.scene):not(.veil) {
+  visibility: hidden;
+}
+
+/* under it the room's canvas needs no fade of its own (0.9 s, "the
+   room"): it is fully there when the loading state starts to go, and that
+   fade is the one hand-over */
+html.loading .scene canvas {
+  transition: none;
+}
+
+.load {
+  display: none;
+}
+
+html.loading .load,
+html.load-out .load {
+  display: flex;
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  align-items: center;
+  justify-content: center;
+  background: var(--bg);
+  touch-action: none;
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+html.load-out .load {
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.6s ease;
+}
+
+html.load-out[data-motion="reduced"] .load {
+  transition-duration: 0.2s;
+}
+
+/* the mark and the word go at once; only the dark fades */
+html.load-out .load__in {
+  visibility: hidden;
+}
+
+.load__in {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 26px;
+  opacity: 0;
+  animation: load-in 0.7s ease 0.35s forwards;
+}
+
+.load__line {
+  position: relative;
+  display: block;
+  width: clamp(132px, 18vw, 240px);
+  height: 1px;
+  background: rgba(239, 234, 227, 0.07);
+}
+
+/* the light: brightest at its middle, fading to nothing at its ends */
+.load__line i {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: -0.5px;
+  height: 2px;
+  border-radius: 2px;
+  background: linear-gradient(90deg, rgba(255, 122, 24, 0), var(--accent) 50%, rgba(255, 122, 24, 0));
+  box-shadow: 0 0 14px 1px rgba(255, 122, 24, 0.35);
+  transform: scaleX(0.22);
+  opacity: 0.6;
+  animation: load-warm 2.6s cubic-bezier(0.45, 0, 0.55, 1) infinite alternate;
+}
+
+/* its warmth on the dark around it */
+.load__line::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 70%;
+  height: 44px;
+  transform: translate(-50%, -50%);
+  background: radial-gradient(closest-side, rgba(255, 122, 24, 0.16), rgba(255, 122, 24, 0));
+  opacity: 0.35;
+  animation: load-halo 2.6s cubic-bezier(0.45, 0, 0.55, 1) infinite alternate;
+}
+
+.load__w {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.22em;
+  font-weight: 500;
+  color: var(--mute);
+}
+
+@keyframes load-in {
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes load-warm {
+  to {
+    transform: scaleX(1);
+    opacity: 1;
+  }
+}
+
+@keyframes load-halo {
+  to {
+    opacity: 1;
+  }
+}
+
+html[data-motion="reduced"] .load__in {
+  animation: load-in 0s 0.35s forwards;
+}
+
+html[data-motion="reduced"] .load__line i {
+  animation: none;
+  transform: scaleX(0.55);
+  opacity: 0.9;
+}
+
+html[data-motion="reduced"] .load__line::after {
+  animation: none;
+  opacity: 0.7;
+}
+
+/* what a screen reader hears, once: "Loading the room" (head script) */
+.load__say {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
 }
 
 /* ============================================================

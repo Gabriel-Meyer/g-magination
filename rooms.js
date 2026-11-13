@@ -26,10 +26,12 @@
   }
 
   /* ---------- motion: on / off ----------
-     The head script has already decided how this visit starts. From here the
-     visitor can change it at any time: the two buttons of the entrance
-     prompt, or the Motion control in the header. The choice is stored, and
-     the room (rooms3d.js) and the films below switch over live. */
+     The head script has already decided how this visit starts (motion on,
+     unless the address or a stored choice says otherwise: the artist's
+     decision of 2026-11-13). From here the visitor can change it at any
+     time with the Motion switch in the header, the one way to the still
+     mode. The choice is stored, and the room (rooms3d.js) and the films
+     below switch over live. */
 
   var motionBtn = document.querySelector(".bar__motion");
 
@@ -49,7 +51,6 @@
   function setMotion(mode) {
     REDUCED = mode === "reduced";
     root.setAttribute("data-motion", REDUCED ? "reduced" : "full");
-    root.removeAttribute("data-motion-ask"); /* answered: never ask again */
     try {
       localStorage.setItem("rooms-motion", REDUCED ? "reduced" : "full");
     } catch (e) {}
@@ -70,13 +71,6 @@
     motionBtn.addEventListener("click", function () {
       setMotion(REDUCED ? "full" : "reduced");
     });
-  [].forEach.call(document.querySelectorAll("[data-motion-set]"), function (b) {
-    b.addEventListener("click", function () {
-      setMotion(b.getAttribute("data-motion-set"));
-      /* the prompt is gone: put focus somewhere that still exists */
-      if (motionBtn) motionBtn.focus({ preventScroll: true });
-    });
-  });
 
   /* ---------- where am I ---------- */
 
