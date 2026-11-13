@@ -10091,8 +10091,12 @@
     fovWide: 55, /* vertical lens on a wide (desk) screen */
     fovTall: 70, /* vertical lens on a portrait phone (horizontal about 36 deg) */
     pitch: [-42, 32], /* how far one looks down and up */
-    /* the joystick's sideways: "turn" (as asked) or "strafe" (?joy=strafe) */
-    joy: Q.get("joy") === "strafe" ? "strafe" : "turn",
+    /* the joystick: "walk" — a direction to walk in, relative to where one
+       looks; it never turns the head (the artist, after trying it on his
+       phone: "Der joystick soll nicht die Blickrichtung verändern nur die geh
+       Richtung!!"). ?joy=turn: the first prototype's stick, whose sideways
+       turned */
+    joy: Q.get("joy") === "turn" ? "turn" : "walk",
     dof: 0.45, /* depth of field while walking: this share of the lens' blur, focused where one looks */
     tIn: 1.3, /* s, the hand-over in */
     tOut: [1.3, 3.2], /* s, the hand-over out: short near, longer across the room */
@@ -10362,14 +10366,24 @@
     var tf = f * spd, ts = s * spd * 0.85, tt = t * WALK.turn;
     if (J && J.on) {
       /* the joystick: up walks, down walks back; pushed all the way it walks
-         faster. Sideways turns (or steps, ?joy=strafe). A small dead zone. */
+         faster. A small dead zone. */
       var jy = -J.y, jx = J.x, m = Math.abs(jy), dz = 0.14;
-      var a = m < dz ? 0 : (m - dz) / (1 - dz);
-      var sp = a < 0.82 ? WALK.pace * (a / 0.82) : lerp(WALK.pace, WALK.run, (a - 0.82) / 0.18);
-      tf += (jy < 0 ? -1 : 1) * sp;
-      var ax = Math.abs(jx) < dz ? 0 : (Math.abs(jx) - dz) / (1 - dz);
-      if (WALK.joy === "strafe") ts += (jx < 0 ? -1 : 1) * ax * WALK.pace;
-      else tt += (jx < 0 ? -1 : 1) * ax * ax * WALK.turn;
+      if (WALK.joy === "turn") {
+        var a = m < dz ? 0 : (m - dz) / (1 - dz);
+        var sp = a < 0.82 ? WALK.pace * (a / 0.82) : lerp(WALK.pace, WALK.run, (a - 0.82) / 0.18);
+        tf += (jy < 0 ? -1 : 1) * sp;
+        var ax = Math.abs(jx) < dz ? 0 : (Math.abs(jx) - dz) / (1 - dz);
+        tt += (jx < 0 ? -1 : 1) * ax * ax * WALK.turn;
+      } else {
+        /* the stick is the way to walk: its direction, relative to where one
+           looks, and how far it is pushed for the pace. It turns nothing */
+        var jm = Math.hypot(jx, jy), ja = jm < dz ? 0 : Math.min(1, (jm - dz) / (1 - dz));
+        if (ja > 0) {
+          var jsp = ja < 0.82 ? WALK.pace * (ja / 0.82) : lerp(WALK.pace, WALK.run, (ja - 0.82) / 0.18);
+          tf += (jy / jm) * jsp;
+          ts += (jx / jm) * jsp;
+        }
+      }
     }
     function ap(v, to, up, down) {
       var r = Math.abs(to) > Math.abs(v) && to * v >= 0 ? up : down;
@@ -10886,7 +10900,7 @@
     hint.setAttribute("role", "status");
     hint.innerHTML =
       '<span class="wk-hint__desk">Arrow keys or W A S D to walk, Shift to go faster · drag to look round · the index above takes you to a work · Esc leaves</span>' +
-      '<span class="wk-hint__ph">The ring below: up to walk, to the side to turn · drag anywhere else to look · Index takes you to a work</span>';
+      '<span class="wk-hint__ph">The ring below: push it the way you want to walk · drag anywhere else to look · Index takes you to a work</span>';
     document.body.appendChild(hint);
     WK.el.hint = hint;
 
@@ -10896,7 +10910,7 @@
     joy.setAttribute("aria-roledescription", "joystick");
     joy.setAttribute(
       "aria-label",
-      WALK.joy === "strafe" ? "Walk: drag up to go forward, down to go back, to the side to step sideways" : "Walk: drag up to go forward, down to go back, to the side to turn"
+      WALK.joy === "turn" ? "Walk: drag up to go forward, down to go back, to the side to turn" : "Walk: drag the ring the way you want to go; it does not turn the view"
     );
     joy.innerHTML = '<span class="wk-joy__ring" aria-hidden="true"></span><span class="wk-joy__knob" aria-hidden="true"></span>';
     document.body.appendChild(joy);
