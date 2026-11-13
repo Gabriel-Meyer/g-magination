@@ -1521,6 +1521,30 @@
     nrm.needsUpdate = true;
   }
 
+  /* Bubblegum's lit glass (fixMaterials, MAT-globe_amber_1800K):
+     col/k the emission (1800 K through dusty-rose opal glass); u live:
+     x the cluster's own light on the inner flank, y the limb, z the width
+     of the deeper edge (in cos of the view angle), w the reflection */
+  /* col (his photographs 01 and 04, lit, saturated orange): B 0xff580a is
+       the default, his final pick once the back was no longer so bright;
+       A 0xff4a06 is one step redder (?globe=a shows it, to compare in the
+       room: nothing else reads that parameter); C 0xff6a10 one step toward
+       amber (the first photo pass, "zu gelb"). */
+  var GLOBE = { col: /[?&]globe=a(&|$)/i.test(location.search) ? 0xff4a06 : 0xff580a, k: 0.96, u0: [0.15, 0.3, 0.2, 0.45], own: 0.25, u: null, base: 1,
+    /* t0: the colour of the cluster's own light on the inner flanks (x the
+       emission) and, in w, the volume: how much brighter the side of a
+       globe toward the knot is than its outer pole */
+    t0: [1.0, 0.75, 0.5, 0.08], t: null, mat: null,
+    /* s0: the glint, x its strength, y its tightness (a Phong exponent):
+       the bright warm ceiling straight over the lamp, seen in the glass */
+    s0: [0.35, 48], s: null };
+  /* the hue, live: one colour (r must stay ff); __rooms.globe().hue(0x...) */
+  GLOBE.hue = function (hex) {
+    GLOBE.col = hex;
+    if (GLOBE.mat) GLOBE.mat.emissive.setHex(hex);
+    if (typeof invalidate === "function") invalidate();
+  };
+
   function fixMaterials(obj, selfScale, warm) {
     var out = { glass: [], veneer: [], led: [] };
     var done = {};
@@ -1547,33 +1571,96 @@
       else occluders.push(o);
       if (n === "MAT-globe_amber_1800K") {
         if (!done[n]) {
-          var gm = new THREE.MeshPhysicalMaterial({
-            name: n, color: 0x8a4a3a, roughness: 0.2,
-            clearcoat: 1, clearcoatRoughness: 0.09, envMapIntensity: 0.42,
-            emissive: 0xff5a14, emissiveIntensity: 0.96
+          /* LIT OPAL GLASS, after his photographs (06, 01) and his own
+             render (08), not a studio object: see notes/photo-bubblegum.md.
+             No clearcoat and none of the studio map (that put the same
+             gridded window on all sixteen); no transmission (a whole extra
+             pass). Everything is emission that varies over the globe, plus
+             a reflection of what a globe here really has round it. */
+          GLOBE.u = { value: new THREE.Vector4().fromArray(GLOBE.u0) };
+          GLOBE.t = { value: new THREE.Vector4().fromArray(GLOBE.t0) };
+          GLOBE.s = { value: new THREE.Vector2().fromArray(GLOBE.s0) };
+          GLOBE.base = new THREE.Color(GLOBE.col).r * GLOBE.k;
+          var gm = new THREE.MeshStandardMaterial({
+            name: n, color: 0x000000, roughness: 1, metalness: 0, envMapIntensity: 0,
+            emissive: GLOBE.col, emissiveIntensity: GLOBE.k
           });
-          /* lit opal glass: hot in the middle of each globe, deeper and
-             redder toward its edge, the way the photographs show it */
+          var gU = { uClC: { value: new THREE.Vector3(CL.x, CL.y, CL.z) }, uGl: GLOBE.u, uGt: GLOBE.t, uGs: GLOBE.s };
           gm.onBeforeCompile = function (sh) {
+            sh.uniforms.uClC = gU.uClC;
+            sh.uniforms.uGl = gU.uGl;
+            sh.uniforms.uGt = gU.uGt;
+            sh.uniforms.uGs = gU.uGs;
+            sh.uniforms.uGce = { value: CEIL }; /* the ceiling's height (set by the room before the lamp is drawn) */
+            sh.vertexShader = sh.vertexShader
+              .replace("#include <common>", "#include <common>\nvarying vec3 vGW;")
+              .replace("#include <project_vertex>", "#include <project_vertex>\nvGW = (modelMatrix * vec4(transformed, 1.0)).xyz;");
             /* lit opal glass is its own light: the lamp inside must not
                also floodlight it from ten centimetres */
-            sh.fragmentShader = sh.fragmentShader.replace(
-              "#include <lights_fragment_end>",
-              "#include <lights_fragment_end>\n" +
-                "reflectedLight.directDiffuse *= 0.0;\nreflectedLight.directSpecular *= 0.0;\n" +
-                /* ...nor put a white highlight on the clearcoat of the globes
-                   across the cluster, seen through the gaps */
-                "#ifdef USE_CLEARCOAT\nclearcoatSpecularDirect *= 0.0;\n#endif\n"
-            );
-            sh.fragmentShader = sh.fragmentShader.replace(
-              "#include <emissivemap_fragment>",
-              "#include <emissivemap_fragment>\n" +
-                "float gNdv = clamp(dot(normalize(normal), normalize(vViewPosition)), 0.0, 1.0);\n" +
-                "totalEmissiveRadiance *= mix(0.42, 1.0, pow(gNdv, 1.3));\n" +
-                "totalEmissiveRadiance.g *= mix(0.74, 1.04, gNdv * gNdv);\n"
-            );
+            sh.fragmentShader = sh.fragmentShader
+              .replace("#include <common>", "#include <common>\nvarying vec3 vGW;\nuniform vec3 uClC;\nuniform vec4 uGl;\nuniform vec4 uGt;\nuniform vec2 uGs;\nuniform float uGce;\n#define GLOBE_OWN " + GLOBE.own.toFixed(3) + "\n")
+              .replace(
+                "#include <lights_fragment_end>",
+                "#include <lights_fragment_end>\nreflectedLight.directDiffuse *= 0.0;\nreflectedLight.directSpecular *= 0.0;\n"
+              )
+              .replace(
+                "#include <emissivemap_fragment>",
+                "#include <emissivemap_fragment>\n" +
+                  /* 1 in the picture, glowDim's share in the glow source: so
+                     the reflection is dimmed with the emission there */
+                  "float gK = totalEmissiveRadiance.r / " + GLOBE.base.toFixed(5) + ";\n" +
+                  "vec3 gN = normalize(inverseTransformDirection(normal, viewMatrix));\n" +
+                  "vec3 gV = normalize(cameraPosition - vGW);\n" +
+                  "float gNdv = clamp(dot(gN, gV), 0.0, 1.0);\n" +
+                  /* where this globe's centre is (a 75 mm sphere), and which
+                     way the middle of the cluster lies from it */
+                  "vec3 gC = vGW - gN * 0.075; vec3 gIn = uClC - gC; float gD = length(gIn); gIn /= max(gD, 1e-4);\n" +
+                  /* the cluster's own light on this globe: the flank that
+                     faces the other fifteen, near when it is gathered, and
+                     falling off as it opens */
+                  "float gNear = exp(-max(gD - 0.2, 0.0) * 5.0);\n" +
+                  "float gFace = dot(gN, gIn);\n" +
+                  "float gHot = (GLOBE_OWN + gNear) * smoothstep(-0.25, 0.85, gFace);\n" +
+                  /* the opal shell: an even face, a little brighter toward the
+                     limb (a longer path through the milky glass), and at the
+                     very edge a thin deeper, redder line */
+                  "float gLimb = 1.0 + uGl.y * pow(1.0 - gNdv, 2.0);\n" +
+                  /* (at least ~3 pixels wide: on a phone, drawn without
+                     multisampling, a one-pixel dark edge breaks up into a
+                     row of dark dots along every globe) */
+                  "float gEdge = smoothstep(0.0, max(uGl.z, 3.0 * fwidth(gNdv)), gNdv);\n" +
+                  /* volume: a gentle gradient across the face, lighter toward the
+                     knot, deeper toward the outer pole (his 01 and 04: some
+                     15 % across a globe) */
+                  "float gVol = 1.0 + uGt.w * gFace;\n" +
+                  /* the edge leans red, the way the unlit glass is salmon */
+                  "vec3 gE = totalEmissiveRadiance * gLimb * gVol * mix(vec3(0.6, 0.22, 0.2), vec3(1.0), gEdge);\n" +
+                  "gE += totalEmissiveRadiance * uGt.rgb * uGl.x * gHot * mix(0.55, 1.0, gEdge);\n" +
+                  /* what the glass reflects: no studio. Toward the middle of
+                     the cluster its glowing neighbours, above the warm ceiling
+                     over it, everywhere else the dark room; a glass's Fresnel */
+                  "vec3 gR = reflect(-gV, gN);\n" +
+                  "float gF = 0.04 + 0.96 * pow(1.0 - gNdv, 5.0);\n" +
+                  /* (the neighbours held back at the very rim: at full
+                     Fresnel they drew a pale line round every globe) */
+                  "vec3 gEnv = vec3(1.0, 0.42, 0.12) * 1.1 * gNear * smoothstep(0.1, 0.75, dot(gR, gIn)) * mix(0.35, 1.0, gEdge)\n" +
+                  "  + vec3(0.30, 0.17, 0.09) * smoothstep(-0.1, 0.7, gR.y) + vec3(0.012, 0.010, 0.009);\n" +
+                  "gE += gEnv * gF * uGl.w * gK;\n" +
+                  /* a small soft glint: the brightest surface near the lamp
+                     is the ceiling straight over it, lit by all sixteen; each
+                     globe sees that patch from its own place, so the glint
+                     sits a little differently on each */
+                  "vec3 gTo = normalize(vec3(uClC.x, uGce, uClC.z) - vGW);\n" +
+                  "gE += vec3(1.0, 0.72, 0.52) * uGs.x * pow(max(dot(gR, gTo), 0.0), uGs.y) * gEdge * gK;\n" +
+                  "totalEmissiveRadiance = gE;\n"
+              );
+          };
+          gm.extensions = { derivatives: true }; /* fwidth, on WebGL 1 */
+          gm.customProgramCacheKey = function () {
+            return "opal-globe";
           };
           done[n] = gm;
+          GLOBE.mat = gm;
           /* sixteen overlapping emitters would otherwise stack their own
              glow onto themselves until the glass clips to white */
           glowDim.push({ m: gm, k: 0.24 });
@@ -2886,10 +2973,30 @@
 
     /* the red cord, knot to ceiling, and its cap */
     var len = CEIL - CL.y;
-    var cord = new THREE.Mesh(
-      new THREE.CylinderGeometry(0.004, 0.004, len, 8),
-      new THREE.MeshStandardMaterial({ color: 0xb8301c, roughness: 0.55, envMapIntensity: 0.3 })
-    );
+    var cordMat = new THREE.MeshStandardMaterial({ color: 0xb8301c, roughness: 0.55, envMapIntensity: 0.3 });
+    /* the globes' light on the cord just over them (his photograph 06: the
+       first hand's breadth of cord above the cluster is lit red, then it
+       goes dark toward the ceiling). Light falling ON the cord, as WARM on
+       the cables: it emits nothing and stays out of the glow. uCord: x the
+       radius the globes are at (m), y how lit the lamp is (as the light) */
+    var uCord = { value: new THREE.Vector2(0.21, 1) };
+    cordMat.onBeforeCompile = function (sh) {
+      sh.uniforms.uCord = uCord;
+      sh.vertexShader = sh.vertexShader
+        .replace("#include <common>", "#include <common>\nvarying float vCordH;")
+        .replace("#include <begin_vertex>", "#include <begin_vertex>\nvCordH = position.y + " + (len / 2).toFixed(4) + ";");
+      sh.fragmentShader = sh.fragmentShader
+        .replace("#include <common>", "#include <common>\nvarying float vCordH;\nuniform vec2 uCord;")
+        .replace(
+          "#include <lights_fragment_end>",
+          "#include <lights_fragment_end>\nfloat cR2 = uCord.x * uCord.x;\n" +
+            "reflectedLight.indirectDiffuse += diffuseColor.rgb * vec3(" + WARM.map(function (c) { return (c * 2.2).toFixed(3); }).join(",") + ") * uCord.y * cR2 / (cR2 + vCordH * vCordH * 2.5);\n"
+        );
+    };
+    cordMat.customProgramCacheKey = function () {
+      return "cl-cord";
+    };
+    var cord = new THREE.Mesh(new THREE.CylinderGeometry(0.004, 0.004, len, 8), cordMat);
     cord.position.set(0, len / 2, 0); /* it rises out of the tangle */
     cord.layers.enable(GLOW);
     occluders.push(cord);
@@ -2957,6 +3064,7 @@
           cGeo.attributes.normal.needsUpdate = true;
         }
         light.intensity = 6.0 * (0.12 + 0.88 * e * e);
+        uCord.value.set(Math.max(0.21, (r + GC) / 1000), 0.12 + 0.88 * e * e);
         if (ROOMT && ROOMT.clLight) light.intensity *= ROOMT.clLight; /* the test room */
     };
     /* for checking (window.__rooms.clCheck): every globe's direction and
@@ -9095,6 +9203,8 @@
       },
       /* the pen's veneer map, live: ven().u.value = (gain, mean green, contrast) */
       ven: function () { return VEN; },
+      /* Bubblegum's glass, live: globe().u.value = (inner light, limb, edge, reflection) */
+      globe: function () { return GLOBE; },
       penClearance: function () {
         if (!RIG.penParts) return null;
         var b = new THREE.Box3(), minZ = 1e9, minY = 1e9, atZ = 0;
