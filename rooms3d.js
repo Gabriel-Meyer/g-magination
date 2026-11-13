@@ -159,7 +159,7 @@
   /* what counts as content: a drag never starts here */
   var SOLID =
     "a, button, input, select, textarea, label, video, summary, " +
-    ".panel, .open__text, .ask, .more__card, .hud, .skip, .cap, .sheet";
+    ".panel, .open__text, .ask, .more__card, .hud, .skip, .cap, .sheet, .wk-joy"; /* (.wk-joy: WALK) */
 
   /* ---------- small maths ---------- */
 
@@ -701,6 +701,7 @@
 
   function onDown(e) {
     if (!live || pid !== null || TUNE) return; /* (?tune=1 has its own) */
+    if (WK.on || WK.bl) return; /* WALK: the walk looks with its own drag */
     if (e.pointerType === "mouse" && e.button !== 0) return;
     if (e.isPrimary === false) return;
     var t = e.target;
@@ -799,6 +800,7 @@
     }
     k.updateWorldMatrix(true, false);
     penBox.setFromObject(k);
+    if (!walkReach(penBox)) return false; /* WALK: within reach only */
     var r = canvas.getBoundingClientRect(), x0 = 1e9, y0 = 1e9, x1 = -1e9, y1 = -1e9;
     for (var c = 0; c < 8; c++) {
       penV.set(c & 1 ? penBox.max.x : penBox.min.x, c & 2 ? penBox.max.y : penBox.min.y, c & 4 ? penBox.max.z : penBox.min.z).project(camera);
@@ -1360,6 +1362,7 @@
 
   /* the closing card covers the screen: the room need not draw under it */
   function cardCovers() {
+    if (WK.on || WK.bl) return false; /* WALK: the stage has the screen */
     return G.narrow && G.moreCol > 0 && G.moreCol - window.scrollY < 40;
   }
 
@@ -3056,6 +3059,7 @@
     }
     k.updateWorldMatrix(true, true);
     clBox.setFromObject(k);
+    if (!walkReach(clBox)) return false; /* WALK: within reach only */
     var r = canvas.getBoundingClientRect(), x0 = 1e9, y0 = 1e9, x1 = -1e9, y1 = -1e9;
     for (var c = 0; c < 8; c++) {
       clV.set(c & 1 ? clBox.max.x : clBox.min.x, c & 2 ? clBox.max.y : clBox.min.y, c & 4 ? clBox.max.z : clBox.min.z).project(camera);
@@ -8456,6 +8460,7 @@
     camera.position.copy(vPos);
     camera.lookAt(vTgt);
     camera.setViewOffset(G.W, G.Hc, (0.5 - o.cx) * G.W, (0.5 - o.cy) * G.Hc, G.W, G.Hc);
+    if (WK.on || WK.bl) walkCam(o); /* WALK: the visitor's eye, or the hand-over */
   }
 
   /* ============================================================
@@ -9128,6 +9133,7 @@
     var ap = cur ? cur.act || (REDUCED && cur.w ? cur.w.apart || 0 : 0) : 0;
     if (ap) K *= 1 - DOF.kApart * ap;
     K = lerp(K, DOF.K * DOF.kEnd, T.t[N] || 0);
+    if (WK.w > 0) K = walkDofK(K, S); /* WALK: focused where one looks */
     DOF.Kt = K;
     /* critically damped spring on 1/S; a cut (motion off) or the first
        picture snaps */
@@ -9558,6 +9564,7 @@
        exposure opens a little while you stand at it. (The wall box needs no
        help: its grain reads at the room's exposure.) */
     renderer.toneMappingExposure = by.bs ? lerp(1, 1.24, presence(by.bs)) : 1;
+    if (WK.w > 0) walkPose(); /* WALK: the works at rest, the light where one stands */
     updateCamera();
     syncLocals();
     hudSync();
@@ -9611,6 +9618,7 @@
     }
     whichChapter(ty);
     timeline(sy);
+    if ((WK.on || WK.bl) && walkFrame(dt)) again = true; /* WALK */
     if (LZ.on) {
       lzNear();
       lzVeil();
@@ -9695,7 +9703,8 @@
   var atKey = "";
   function atSync() {
     var k;
-    if (REDUCED) k = shown <= 0 ? "open" : shown > N ? "more" : STN[shown - 1].key;
+    if (WK.on) k = walkAt(); /* WALK: the work one stands nearest */
+    else if (REDUCED) k = shown <= 0 ? "open" : shown > N ? "more" : STN[shown - 1].key;
     else k = T.cur >= 0 ? STN[T.cur].key : T.t[N] >= 0.5 ? "more" : "open";
     if (k === atKey) return;
     atKey = k;
@@ -9741,6 +9750,7 @@
      document, at the work you were at, with one quiet line saying so. */
   function giveUp(why) {
     if (!live) return;
+    walkDrop(); /* WALK */
     var at = T.cur >= 0 ? STN[T.cur].sec : null;
     if (sheetOpen) closeSheet(true);
     live = false;
@@ -9824,6 +9834,7 @@
      the last work on, the end looks back down the whole room: want all. */
   function lzNear() {
     if (!LZ.on || !live) return;
+    if (WK.on) return walkNear(false); /* WALK: by where one stands and looks */
     var at = -1, i;
     if (REDUCED) at = chapter - 1;
     else {
@@ -9942,7 +9953,7 @@
     return lzFr.intersectsBox(lzB);
   }
   function lzShow(key, hold) {
-    var fade = live && !document.hidden && !sheetOpen && !cardCovers() && !G.tall && lzSeen(key);
+    var fade = live && !document.hidden && !sheetOpen && !cardCovers() && !G.tall && lzSeen(key) && !walkFar(key); /* (walkFar: WALK) */
     if (fade) {
       pose();
       fade = lzSnap();
@@ -10019,6 +10030,966 @@
       void veil.offsetWidth;
       veil.classList.add("is-cut");
     }
+  }
+
+  /* ============================================================
+     WALK — a second way through the room (notes/walk-mode.md)
+     ============================================================
+     The artist: "Können wir noch einen Alternativen Modus konzipieren in
+     dem man durch die Ausstellung laufen kann?" and, on the concept:
+     "Gehen: joistick unten zu ziehen am Handy und gehen mit Pfeiltaste
+     oder wasd. Klick auf ein Werk: nein nur über index".
+
+     A control in the header (and ?mode=walk) hands the camera from the
+     guided walk to the visitor: eye height, a wider lens, the page holds
+     still and the room has the screen. Desk: W/S or up/down walk, A/D step
+     sideways, left/right turn, Shift walks faster, a drag looks. Phone: a
+     joystick at the foot of the screen (up/down walks, left/right turns),
+     one finger anywhere else looks. Nothing in the room is clicked to go
+     anywhere: the index (the header's numbers, Index) leaves the walk for
+     the guided page at that work. Only the two real switches (the pen's
+     knob, Bubblegum's wall switch) can be pressed, and only within reach.
+
+     Everything of it is in this block. Outside it there are one-line hooks,
+     each marked WALK, and none of them does anything unless the walk has
+     been entered (WK.on, or WK.bl while handing over). The walk control is
+     a hidden preview for now (WALK.on, below): without ?mode=walk there is
+     no walk control at all, the page exactly as before.
+     ============================================================ */
+
+  var WALK = {
+    /* HIDDEN PREVIEW (the artist, 2026-11-13: live, but hidden, so he can try
+       it on his phone): the walk control exists only when the page was
+       opened with ?mode=walk or ?walk=on. That is remembered for the tab, so
+       the index's hand-over and a reload keep it; ?walk=off removes it
+       again. Every other visitor gets the page exactly as before. To open
+       the walk to everyone, this becomes: Q.get("walk") !== "off" */
+    on: (function () {
+      var q = Q.get("walk");
+      if (q === "off") {
+        try { sessionStorage.removeItem("rooms-walk"); } catch (e) {}
+        return false;
+      }
+      var want = q === "on" || Q.get("mode") === "walk";
+      try {
+        if (want) sessionStorage.setItem("rooms-walk", "1");
+        else want = sessionStorage.getItem("rooms-walk") === "1";
+      } catch (e) {}
+      return want;
+    })(),
+    /* my own choice (the artist may overrule it): the two real switches
+       stay pressable while walking, within reach. ?walkswitch=off: nothing
+       in the room reacts to a click */
+    switches: Q.get("walkswitch") !== "off",
+    reach: 3.0, /* m, in plan, from where one stands to the switch */
+    eye: 1.6, /* eye height, m */
+    pace: 1.4, /* m/s, a natural walk */
+    run: 2.6, /* m/s, with Shift or the joystick pushed all the way */
+    acc: 4.5, /* how quickly a step gets going (1/s) */
+    dec: 6.5, /* ...and comes to rest */
+    turn: 80, /* deg/s, the keys and a full joystick */
+    fovWide: 55, /* vertical lens on a wide (desk) screen */
+    fovTall: 70, /* vertical lens on a portrait phone (horizontal about 36 deg) */
+    pitch: [-42, 32], /* how far one looks down and up */
+    /* the joystick's sideways: "turn" (as asked) or "strafe" (?joy=strafe) */
+    joy: Q.get("joy") === "strafe" ? "strafe" : "turn",
+    dof: 0.45, /* depth of field while walking: this share of the lens' blur, focused where one looks */
+    tIn: 1.3, /* s, the hand-over in */
+    tOut: [1.3, 3.2], /* s, the hand-over out: short near, longer across the room */
+    near: 5.5, /* m: the label names a work this near, looked toward */
+    load: [18, 34] /* phone: models within this (m) all round, and this far ahead */
+  };
+  if (!RB) WALK.on = false; /* (the open room has no walls to keep one in: ?back=off has no walk) */
+
+  /* where one may not stand: [x0, x1, z0, z1, r] = the rectangle in plan
+     (x along the wall, z out from it) grown by r. Measured from the built
+     works (__rooms.walk.boxes()), see notes/walk-mode.md. */
+  var WK_OUT = [
+    [-0.12, 0.12, 0, 0.45, 0.45], /* 01 the pen (veneer and foot reach 0.43 m out); its cord on the floor is stepped over */
+    [8.22, 8.78, 0, 1.42, 0.45], /* 02 Bubblegum gathered (globes 0.88 - 1.42 m out, at 1.46 - 1.96 m: head height); to the wall, no pocket behind */
+    [16.3, 16.7, 0, 0.13, 0.85], /* 03 LR01 on the wall: one stands a metre off it */
+    [24.2, 24.8, 0, 0.1, 0.9], /* 04 the Light Box */
+    [31.65, 33.35, 0, 0.15, 0.7], /* 05 the window, its sill and the wire man's legs */
+    [39.9, 41.38, 0, 2.25, 0.4], /* 06 the chair and its blanket (0.85 - 2.25 m out), to the wall */
+    [47.45, 49.55, 0, 0.04, 0.95], /* 07 Pulls, three canvases */
+    [56.15, 56.85, 0, 0.03, 0.95], /* 08 the poster */
+    [64.1, 64.9, 0, 1.2, 0.45] /* 09 the plinth (0.9 - 1.2 m out), the torch and the ball on it, to the wall */
+  ];
+
+  var WK = {
+    on: false, /* walking: the visitor's hand drives the camera */
+    bl: null, /* a hand-over in progress: { dir: "in" | "out", t0, dur, from } */
+    w: 0, /* how much of the picture is the walk's (0 guided, 1 walking) */
+    x: 0, z: 3, yaw: 90, pitch: 0, /* where one stands and looks (yaw 0: at the art wall; 90: down the room) */
+    vf: 0, vs: 0, vt: 0, /* forward, sideways (m/s), turning (deg/s) */
+    keys: {}, joy: null, look: null,
+    at: "", lab: null, lz: "", out: null, ft: [], btn: null, el: {}, hintT: 0, ready: false
+  };
+  var wkV = null, wkW = null, wkU = null;
+
+  function wkBounds() {
+    var k = RB.keep;
+    return [RB.xs + k, RB.xe - k, k, RB.d - k];
+  }
+  /* put a point in plan back where one may stand: inside the walls (the
+     door included: it is in the start wall, so not passable), outside every
+     keep-out. Pushed out the shortest way, so walking into something slides
+     along it. */
+  function wkSolve(p) {
+    var b = wkBounds();
+    p.hit = false;
+    for (var it = 0; it < 4; it++) {
+      p.x = clamp(p.x, b[0], b[1]);
+      p.z = clamp(p.z, b[2], b[3]);
+      for (var i = 0; i < WK_OUT.length; i++) {
+        var o = WK_OUT[i];
+        var qx = clamp(p.x, o[0], o[1]), qz = clamp(p.z, o[2], o[3]);
+        var dx = p.x - qx, dz = p.z - qz, d = Math.sqrt(dx * dx + dz * dz);
+        if (d >= o[4]) continue;
+        p.hit = true;
+        if (d > 1e-6) {
+          p.x = qx + (dx / d) * o[4];
+          p.z = qz + (dz / d) * o[4];
+        } else {
+          /* inside the shape itself: out by the nearest side (never toward the wall) */
+          var l = p.x - o[0], r = o[1] - p.x, f = o[3] - p.z, m = Math.min(l, r, f);
+          if (m === f) p.z = o[3] + o[4];
+          else if (m === l) p.x = o[0] - o[4];
+          else p.x = o[1] + o[4];
+        }
+      }
+    }
+    return p;
+  }
+  function wkFree(x, z) {
+    var p = wkSolve({ x: x, z: z });
+    return Math.abs(p.x - x) < 1e-3 && Math.abs(p.z - z) < 1e-3;
+  }
+  /* a move in small steps (a late frame must not step through a plinth) */
+  function wkMove(dx, dz) {
+    var n = Math.max(1, Math.ceil(Math.hypot(dx, dz) / 0.06)), p = { x: WK.x, z: WK.z }, sx = dx / n, sz = dz / n, L = Math.hypot(sx, sz);
+    for (var i = 0; i < n; i++) {
+      var x0 = p.x, z0 = p.z;
+      p.x += sx;
+      p.z += sz;
+      wkSolve(p);
+      /* head-on into a work (not a wall): it does not stop you dead, it
+         turns you round it, to the room's side first */
+      if (p.hit && (p.x - x0) * sx + (p.z - z0) * sz < 0.3 * L * L) {
+        var best = null, bp = ((p.x - x0) * sx + (p.z - z0) * sz) / L;
+        for (var a = -1; a <= 1; a += 2) {
+          var c = Math.cos(0.9), s = Math.sin(0.9) * a, q = { x: x0 + sx * c - sz * s, z: z0 + sx * s + sz * c };
+          wkSolve(q);
+          var pr = ((q.x - x0) * sx + (q.z - z0) * sz) / L + (q.z - z0) * 0.05;
+          if (pr > bp + 1e-4) {
+            bp = pr;
+            best = q;
+          }
+        }
+        if (best) {
+          p.x = best.x;
+          p.z = best.z;
+        }
+      }
+    }
+    WK.x = p.x;
+    WK.z = p.z;
+  }
+
+  function wkDir(yaw, pitch, out) {
+    var y = yaw * RAD, p = pitch * RAD;
+    return out.set(Math.sin(y) * Math.cos(p), Math.sin(p), -Math.cos(y) * Math.cos(p));
+  }
+  /* the lens: 55 deg on a wide screen, 70 on a portrait phone, between in between */
+  function wkFov() {
+    var a = G.W / Math.max(1, G.Hc);
+    return lerp(WALK.fovTall, WALK.fovWide, clamp((a - 0.6) / 0.7, 0, 1));
+  }
+  /* how far the eye looks before it meets something: the room's surfaces,
+     or a rough box round a work. The focus goes there. */
+  function wkHit(o, d) {
+    var t = 60, b, k;
+    function plane(c, oc, dc) {
+      if (Math.abs(dc) < 1e-6) return;
+      var s = (c - oc) / dc;
+      if (s > 0.05 && s < t) t = s;
+    }
+    plane(0, o.z, d.z);
+    plane(RB.d, o.z, d.z);
+    plane(RB.xs, o.x, d.x);
+    plane(RB.xe, o.x, d.x);
+    plane(0, o.y, d.y);
+    plane(CEIL, o.y, d.y);
+    for (k in WORKBOX) {
+      b = WORKBOX[k];
+      var lo = [b[0] - 0.1, b[2] - 0.05, 0], hi = [b[1] + 0.1, b[3] + 0.05, b[4] + 0.25];
+      var oo = [o.x, o.y, o.z], dd = [d.x, d.y, d.z], t0 = 0, t1 = t, ok = true;
+      for (var a = 0; a < 3 && ok; a++) {
+        if (Math.abs(dd[a]) < 1e-6) {
+          if (oo[a] < lo[a] || oo[a] > hi[a]) ok = false;
+          continue;
+        }
+        var ta = (lo[a] - oo[a]) / dd[a], tb = (hi[a] - oo[a]) / dd[a];
+        if (ta > tb) { var sw = ta; ta = tb; tb = sw; }
+        t0 = Math.max(t0, ta);
+        t1 = Math.min(t1, tb);
+        if (t0 > t1) ok = false;
+      }
+      if (ok && t0 > 0.05 && t0 < t) t = t0;
+    }
+    return t;
+  }
+
+  /* ---- the picture: where the camera is, every frame (from updateCamera) ---- */
+  function wkPose(o) {
+    /* the guided camera as updateCamera has just put it */
+    var d = vC.subVectors(vTgt, vPos), L = Math.max(1e-4, d.length());
+    return {
+      x: vPos.x, y: vPos.y, z: vPos.z, yaw: Math.atan2(d.x, -d.z) / RAD, pitch: Math.asin(clamp(d.y / L, -1, 1)) / RAD,
+      S: L, fov: FOV, cx: o.cx, cy: o.cy, near: camera.near
+    };
+  }
+  function wkHere() {
+    if (!wkV) {
+      wkV = new THREE.Vector3();
+      wkW = new THREE.Vector3();
+      wkU = new THREE.Vector3();
+    }
+    wkDir(WK.yaw, WK.pitch, wkW);
+    wkV.set(WK.x, WALK.eye, WK.z);
+    return { x: WK.x, y: WALK.eye, z: WK.z, yaw: WK.yaw, pitch: WK.pitch, S: wkHit(wkV, wkW), fov: wkFov(), cx: 0.5, cy: 0.5, near: 0.08 };
+  }
+  function wkAng(a, b, k) {
+    var d = ((((b - a) % 360) + 540) % 360) - 180;
+    return a + d * k;
+  }
+  function walkCam(o) {
+    var A = wkHere(), P = A;
+    if (WK.bl) {
+      var bl = WK.bl, k = glide(bl.k), F = bl.from, B = bl.dir === "in" ? A : wkPose(o);
+      /* across the room the path bows out from the wall (never through the
+         hanging cluster or a plinth); near, a straight line */
+      var cz = Math.abs(B.x - F.x) > 4 ? Math.max(F.z, B.z, 3.2) : (F.z + B.z) / 2;
+      var cy = Math.abs(B.x - F.x) > 4 ? Math.max(F.y, B.y, 1.9) : (F.y + B.y) / 2;
+      var u = 1 - k;
+      P = {
+        x: lerp(F.x, B.x, k),
+        y: u * u * F.y + 2 * u * k * cy + k * k * B.y,
+        z: u * u * F.z + 2 * u * k * cz + k * k * B.z,
+        yaw: wkAng(F.yaw, B.yaw, k), pitch: lerp(F.pitch, B.pitch, k),
+        S: Math.exp(lerp(Math.log(F.S), Math.log(B.S), k)),
+        fov: lerp(F.fov, B.fov, k), cx: lerp(F.cx, B.cx, k), cy: lerp(F.cy, B.cy, k), near: lerp(F.near, B.near, k)
+      };
+    }
+    WK.cam = P;
+    wkDir(P.yaw, P.pitch, wkU);
+    vPos.set(P.x, P.y, P.z);
+    vTgt.copy(vPos).addScaledVector(wkU, P.S);
+    camera.fov = P.fov;
+    camera.near = P.near;
+    camera.position.copy(vPos);
+    camera.lookAt(vTgt);
+    camera.setViewOffset(G.W, G.Hc, (0.5 - P.cx) * G.W, (0.5 - P.cy) * G.Hc, G.W, G.Hc);
+  }
+
+  /* ---- the room round the visitor (from pose(), before the camera) ---- */
+  function walkPose() {
+    var w = WK.w, x = WK.cam ? WK.cam.x : WK.x, z = WK.cam ? WK.cam.z : WK.z;
+    /* the works at rest: whole, gathered, still (the guided acts fade out
+       as the walk comes in, and back as it goes) */
+    if (RIG.pen) RIG.pen(actW(by.pen, "apart") * (1 - w));
+    if (RIG.cl) RIG.cl(lerp(T.gather, 1, w), actW(by.cl, "knot") * (1 - w), spinAuto + by.cl.hand.yaw * RAD);
+    if (RIG.sr) RIG.sr(SR_POSE != null ? SR_POSE : actW(by.sr, "apart") * (1 - w));
+    /* the room's light follows where one STANDS: dark at the entrance and
+       at the pen, rising on the way to Bubblegum, as the guided walk does
+       between the same two works */
+    var g = levelNow, fog = scene.fog.density, ex = renderer.toneMappingExposure;
+    var lv = LV != null ? LV : ROOMT && ROOMT.walk ? sstep(x, X.pen, X.cl) : sstep(x, X.pen - 8, X.pen);
+    var dens = roomLevel(lerp(g, lv, w));
+    scene.fog.density = lerp(fog, dens, w);
+    /* Bulb Studies' warmer exposure, by how near one stands to the window */
+    var bsW = by.bs ? sstep(Math.hypot(x - X.bs, z - 1.2), 4.5, 1.6) : 0;
+    renderer.toneMappingExposure = lerp(ex, lerp(1, 1.24, bsW), w);
+  }
+  /* depth of field while walking (from fxFocus): a shallower share of the
+     lens, focused on what one looks at */
+  function walkDofK(K, S) {
+    var Kw = DOF.K * WALK.dof * clamp(S / DOF.kNear, DOF.kNearMin, 1);
+    return lerp(K, Kw, WK.w);
+  }
+
+  /* ---- each frame (from frame(), after the timeline) ---- */
+  function walkFrame(dt) {
+    var again = false, now = performance.now();
+    if (WK.on) {
+      /* nothing in the guided timeline runs by itself while one walks (the
+         torch's colour, the cluster's slow turn, the pen's auto-click): the
+         loop rests when the visitor stands still */
+      T.mv = true;
+      if (walkStep(dt)) again = true;
+      walkLabel();
+      if (again && dt > 0 && dt < 0.25) {
+        WK.ft.push(dt * 1000);
+        if (WK.ft.length > 4000) WK.ft.shift();
+      }
+    }
+    if (WK.bl) {
+      var bl = WK.bl;
+      bl.k = clamp((now - bl.t0) / 1000 / bl.dur, 0, 1);
+      WK.w = bl.dir === "in" ? glide(bl.k) : 1 - glide(bl.k);
+      if (bl.k >= 1) {
+        WK.bl = null;
+        WK.w = bl.dir === "in" ? 1 : 0;
+        if (bl.dir === "out") walkDone();
+      }
+      again = true;
+    }
+    return again;
+  }
+  function walkStep(dt) {
+    var K = WK.keys, f = 0, s = 0, t = 0, run = !!K.run, J = WK.joy;
+    if (K.f) f += 1;
+    if (K.b) f -= 1;
+    if (K.l) s -= 1;
+    if (K.r) s += 1;
+    if (K.tl) t -= 1;
+    if (K.tr) t += 1;
+    if (f && s) {
+      f *= Math.SQRT1_2;
+      s *= Math.SQRT1_2;
+    }
+    var spd = run ? WALK.run : WALK.pace;
+    var tf = f * spd, ts = s * spd * 0.85, tt = t * WALK.turn;
+    if (J && J.on) {
+      /* the joystick: up walks, down walks back; pushed all the way it walks
+         faster. Sideways turns (or steps, ?joy=strafe). A small dead zone. */
+      var jy = -J.y, jx = J.x, m = Math.abs(jy), dz = 0.14;
+      var a = m < dz ? 0 : (m - dz) / (1 - dz);
+      var sp = a < 0.82 ? WALK.pace * (a / 0.82) : lerp(WALK.pace, WALK.run, (a - 0.82) / 0.18);
+      tf += (jy < 0 ? -1 : 1) * sp;
+      var ax = Math.abs(jx) < dz ? 0 : (Math.abs(jx) - dz) / (1 - dz);
+      if (WALK.joy === "strafe") ts += (jx < 0 ? -1 : 1) * ax * WALK.pace;
+      else tt += (jx < 0 ? -1 : 1) * ax * ax * WALK.turn;
+    }
+    function ap(v, to, up, down) {
+      var r = Math.abs(to) > Math.abs(v) && to * v >= 0 ? up : down;
+      v += (to - v) * (1 - Math.exp(-dt * r));
+      return Math.abs(v) < 0.005 && !to ? 0 : v;
+    }
+    WK.vf = ap(WK.vf, tf, WALK.acc, WALK.dec);
+    WK.vs = ap(WK.vs, ts, WALK.acc, WALK.dec);
+    WK.vt = ap(WK.vt, tt, 9, 10);
+    if (Math.abs(WK.vt) < 0.3 && !tt) WK.vt = 0;
+    WK.yaw += WK.vt * dt;
+    if (WK.yaw > 180) WK.yaw -= 360;
+    if (WK.yaw < -180) WK.yaw += 360;
+    var sy = Math.sin(WK.yaw * RAD), cy = Math.cos(WK.yaw * RAD);
+    var dx = (sy * WK.vf + cy * WK.vs) * dt, dzz = (-cy * WK.vf + sy * WK.vs) * dt;
+    if (dx || dzz) {
+      wkMove(dx, dzz);
+      if (WK.hint && !WK.hint.gone && (Math.abs(WK.x - WK.hint.x) + Math.abs(WK.z - WK.hint.z) > 1.5)) walkHint(false);
+    }
+    if (LZ.on) walkNear(false);
+    return !!(WK.vf || WK.vs || WK.vt || tf || ts || tt);
+  }
+
+  /* ---- the label: the work one stands near and looks toward ---- */
+  function walkLabel() {
+    var best = null, bs = 1e9, cur = WK.at;
+    for (var i = 0; i < N; i++) {
+      var st = STN[i], b = WORKBOX[st.key];
+      if (!b) continue;
+      var dx = (b[0] + b[1]) / 2 - WK.x, dz = b[4] - WK.z, d = Math.hypot(dx, dz);
+      var a = Math.abs(wkAng(WK.yaw, Math.atan2(dx, -dz) / RAD, 1) - WK.yaw);
+      var keep = st.key === cur;
+      if (d > WALK.near + (keep ? 1 : 0) || a > (keep ? 38 : 30)) continue;
+      var sc = d * (1 + a / 25) * (keep ? 0.8 : 1);
+      if (sc < bs) {
+        bs = sc;
+        best = st;
+      }
+    }
+    var k = best ? best.key : "";
+    if (k === WK.at) return;
+    WK.at = k;
+    var L = WK.el.label;
+    if (L) {
+      if (best) {
+        L.n.textContent = best.capInfo.n;
+        L.t.textContent = best.capInfo.title;
+      }
+      L.box.classList.toggle("is-on", !!best);
+    }
+    atSync();
+  }
+
+  /* ---- loading on a phone: by distance from where one stands and looks ---- */
+  function walkNear(force) {
+    if (!LZ.on) return;
+    var key = Math.round(WK.x / 2) + ":" + Math.round(WK.z / 2) + ":" + Math.round(WK.yaw / 20);
+    if (!force && key === WK.lz) return;
+    WK.lz = key;
+    LZ.at = -99; /* (lzNear() starts afresh when the guided walk is back) */
+    var fx = Math.sin(WK.yaw * RAD), fz = -Math.cos(WK.yaw * RAD), list = [];
+    for (var i = 0; i < N; i++) {
+      var st = STN[i], b = WORKBOX[st.key];
+      if (!b) continue;
+      var dx = (b[0] + b[1]) / 2 - WK.x, dz = b[4] - WK.z, d = Math.max(0.1, Math.hypot(dx, dz)), ah = (dx * fx + dz * fz) / d;
+      if (d < WALK.load[0] || (d < WALK.load[1] && ah > 0.7)) list.push({ key: st.key, d: d * (ah > 0.5 ? 0.6 : 1) });
+    }
+    list.sort(function (a, b) { return a.d - b.d; });
+    var q = [];
+    LZ.q.forEach(function (k) {
+      if (LZ.wait[k]) q.push(k);
+    });
+    list.forEach(function (e) {
+      if (!lzReady(e.key) && LZ.busy !== e.key && q.indexOf(e.key) < 0) q.push(e.key);
+    });
+    LZ.q = q;
+    lzPump();
+  }
+
+  /* the header's "where am I" while walking: the station one stands
+     nearest (the entrance before the pen, the closing past the ball) */
+  function walkAt() {
+    var t = wkTarget(null);
+    return t.st ? t.st.key : t.y === 0 ? "open" : "more";
+  }
+
+  /* a work that comes while one walks, far off in the haze, simply appears:
+     the cross-fade of the whole last picture (lzShow) would leave a ghost of
+     the room behind a moving visitor. Near (never, by the load distances,
+     but a slow phone may lag) it fades as ever. */
+  function walkFar(key) {
+    var b = WORKBOX[key];
+    return !!(WK.on && b && Math.hypot((b[0] + b[1]) / 2 - WK.x, b[4] - WK.z) > 14);
+  }
+
+  /* ---- the switches: only within reach (from penKnobHit / clSwHit) ---- */
+  function walkReach(box) {
+    if (!WK.on) return true;
+    if (!WALK.switches || WK.bl) return false;
+    var c = box.getCenter(new THREE.Vector3());
+    return Math.hypot(c.x - WK.x, c.z - WK.z) <= WALK.reach; /* in plan: standing within 3 m of it */
+  }
+
+  /* ---- input ---- */
+  var WK_KEYS = {
+    KeyW: "f", ArrowUp: "f", KeyS: "b", ArrowDown: "b", KeyA: "l", KeyD: "r",
+    ArrowLeft: "tl", ArrowRight: "tr", ShiftLeft: "run", ShiftRight: "run"
+  };
+  var WK_BLOCK = { Space: 1, PageUp: 1, PageDown: 1, Home: 1, End: 1 };
+  function wkTyping(e) {
+    var t = e.target;
+    return t && (t.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName));
+  }
+  function wkKeyDown(e) {
+    if (!WK.on) return;
+    if (e.key === "Escape") {
+      e.preventDefault();
+      walkLeave(null);
+      return;
+    }
+    if (e.ctrlKey || e.metaKey || e.altKey || wkTyping(e)) return;
+    var k = WK_KEYS[e.code] || WK_KEYS[e.key];
+    if (k) {
+      /* (Space, Enter on a focused button stay the button's) */
+      e.preventDefault();
+      if (!WK.keys[k]) {
+        WK.keys[k] = true;
+        if (k !== "run") walkHint(false, true);
+        invalidate();
+      }
+    } else if (WK_BLOCK[e.code] && !(e.target && e.target.closest && e.target.closest("button, a"))) e.preventDefault();
+  }
+  function wkKeyUp(e) {
+    var k = WK_KEYS[e.code] || WK_KEYS[e.key];
+    if (k && WK.keys[k]) {
+      WK.keys[k] = false;
+      invalidate();
+    }
+  }
+  function wkBlur() {
+    WK.keys = {};
+    invalidate();
+  }
+  function wkStop(e) {
+    if (WK.on || WK.bl) {
+      if (e.cancelable) e.preventDefault();
+    }
+  }
+  function wkHold() {
+    /* the page stays where it was while one walks */
+    if ((WK.on || WK.bl) && WK.out && Math.abs(window.scrollY - WK.out.y) > 1) window.scrollTo(0, WK.out.y);
+  }
+
+  /* looking: a drag anywhere on the stage that is not the joystick or real
+     content. Grab the room: drag right and the room comes with you (the
+     view turns left). A short still press is left to the switches. */
+  function wkLookDown(e) {
+    if (!WK.on || WK.look) return;
+    if (e.pointerType === "mouse" && e.button !== 0) return;
+    var t = e.target;
+    if (t && t.closest && t.closest(SOLID + ", .wk-joy")) return;
+    if (e.pointerType === "touch" && (e.clientX < EDGE || e.clientX > window.innerWidth - EDGE)) return;
+    WK.look = { id: e.pointerId, x: e.clientX, y: e.clientY, moved: false, type: e.pointerType };
+    try {
+      canvas.setPointerCapture(e.pointerId);
+    } catch (err) {}
+    if (e.pointerType === "mouse") e.preventDefault();
+  }
+  function wkLookMove(e) {
+    var L = WK.look;
+    if (!L || e.pointerId !== L.id) return;
+    var dx = e.clientX - L.x, dy = e.clientY - L.y;
+    if (!L.moved) {
+      if (Math.hypot(dx, dy) < (L.type === "mouse" ? 3 : 6)) return;
+      L.moved = true;
+      root.classList.add("wk-looking");
+    }
+    L.x = e.clientX;
+    L.y = e.clientY;
+    /* degrees per pixel: the room moves a little faster than the hand (a
+       turn round is a few drags, not a dozen); a finger on a phone more */
+    var hf = 2 * Math.atan(Math.tan((wkFov() * RAD) / 2) * (G.W / Math.max(1, G.Hc))) / RAD;
+    var k = (hf / Math.max(1, G.W)) * (L.type === "touch" ? 2.2 : 1.5);
+    WK.yaw -= dx * k;
+    WK.pitch = clamp(WK.pitch + dy * k, WALK.pitch[0], WALK.pitch[1]);
+    walkHint(false, true);
+    invalidate();
+  }
+  function wkLookUp(e) {
+    var L = WK.look;
+    if (!L || e.pointerId !== L.id) return;
+    try {
+      canvas.releasePointerCapture(L.id);
+    } catch (err) {}
+    WK.look = null;
+    root.classList.remove("wk-looking");
+    invalidate();
+  }
+
+  /* the joystick (a phone, or any screen with a touch pointer) */
+  function wkJoyDown(e) {
+    if (!WK.on || (WK.joy && WK.joy.on)) return;
+    var el = WK.el.joy, r = el.getBoundingClientRect();
+    var R = Math.max(24, (el.offsetWidth - WK.el.knob.offsetWidth) / 2);
+    WK.joy = { on: true, id: e.pointerId, cx: r.left + r.width / 2, cy: r.top + r.height / 2, R: R, x: 0, y: 0 };
+    try {
+      el.setPointerCapture(e.pointerId);
+    } catch (err) {}
+    el.classList.add("is-on");
+    e.preventDefault();
+    wkJoyMove(e);
+  }
+  function wkJoyMove(e) {
+    var J = WK.joy;
+    if (!J || !J.on || e.pointerId !== J.id) return;
+    var dx = e.clientX - J.cx, dy = e.clientY - J.cy, d = Math.hypot(dx, dy), m = Math.min(d, J.R);
+    if (d > 0) {
+      dx = (dx / d) * m;
+      dy = (dy / d) * m;
+    }
+    J.x = dx / J.R;
+    J.y = dy / J.R;
+    WK.el.knob.style.transform = "translate(" + dx.toFixed(1) + "px," + dy.toFixed(1) + "px)";
+    if (m > J.R * 0.3) walkHint(false, true);
+    invalidate();
+  }
+  function wkJoyUp(e) {
+    var J = WK.joy;
+    if (!J || e.pointerId !== J.id) return;
+    J.on = false;
+    J.x = J.y = 0;
+    WK.el.knob.style.transform = "";
+    WK.el.joy.classList.remove("is-on");
+    invalidate();
+  }
+
+  /* the index while walking: the header's numbers, Index, the mark: leave
+     the walk for the guided page at that place */
+  function wkClick(e) {
+    if (!WK.on || e.defaultPrevented) return;
+    var a = e.target.closest && e.target.closest('a[href^="#w-"], a[href="#more"], a[href="#top"]');
+    if (!a) return;
+    e.preventDefault();
+    e.stopImmediatePropagation();
+    walkLeave(a.getAttribute("href"));
+  }
+
+  function wkListen(on) {
+    var f = on ? "addEventListener" : "removeEventListener", NP = { passive: false, capture: true };
+    window[f]("keydown", wkKeyDown, true);
+    window[f]("keyup", wkKeyUp, true);
+    window[f]("blur", wkBlur);
+    window[f]("wheel", wkStop, NP);
+    window[f]("touchmove", wkStop, NP);
+    window[f]("scroll", wkHold, true);
+    window[f]("pointerdown", wkLookDown, true);
+    window[f]("pointermove", wkLookMove, true);
+    window[f]("pointerup", wkLookUp, true);
+    window[f]("pointercancel", wkLookUp, true);
+  }
+
+  /* ---- the hint, once, the first time ---- */
+  function walkHint(show, soon) {
+    var H = WK.el.hint;
+    if (!H) return;
+    if (show) {
+      var seen = false;
+      try {
+        seen = localStorage.getItem("rooms-walk-hint") === "1";
+      } catch (e) {}
+      if (seen && Q.get("walkhint") !== "1") return;
+      try {
+        localStorage.setItem("rooms-walk-hint", "1");
+      } catch (e) {}
+      WK.hint = { x: WK.x, z: WK.z, gone: false, t: performance.now() };
+      H.hidden = false;
+      void H.offsetWidth;
+      H.classList.add("is-on");
+      clearTimeout(WK.hintT);
+      WK.hintT = setTimeout(function () {
+        walkHint(false);
+      }, 9000);
+      return;
+    }
+    if (!WK.hint || WK.hint.gone) return;
+    /* once one is under way it goes (not before it has been up 2.5 s) */
+    if (soon && performance.now() - WK.hint.t < 2500) return;
+    WK.hint.gone = true;
+    clearTimeout(WK.hintT);
+    H.classList.remove("is-on");
+  }
+
+  /* ---- in and out ---- */
+  function wkTouch() {
+    return COARSE || (window.matchMedia && window.matchMedia("(any-pointer: coarse)").matches);
+  }
+  function wkUrl(on) {
+    try {
+      var u = new URL(location.href);
+      if (on) u.searchParams.set("mode", "walk");
+      else u.searchParams.delete("mode");
+      history.replaceState(history.state, "", u.pathname + u.search + u.hash);
+    } catch (e) {}
+  }
+  function wkPaint() {
+    var b = WK.btn;
+    if (!b) return;
+    var on = WK.on;
+    b.setAttribute("aria-pressed", String(on));
+    b.setAttribute("aria-label", on ? "Walking freely. Leave the walk and go back to the guided view" : "Walk freely through the room");
+  }
+
+  function walkEnter(instant) {
+    if (!WALK.on || WK.on || WK.bl || !live || G.tall || !camera) return;
+    if (sheetOpen) closeSheet(true);
+    /* nothing hand-operated carries over */
+    for (var i = 0; i < N; i++) {
+      STN[i].hand.yaw = STN[i].hand.pitch = 0;
+      STN[i].hand.to = null;
+    }
+    roomHand.yaw = roomHand.pitch = 0;
+    pid = null;
+    dragging = false;
+    armed = false;
+    root.classList.remove("dragging");
+    /* where the guided camera stands, brought down to eye height (and out
+       of anything it stood in), looking the way it looked */
+    var o = CAM || newCam(), d = camera.getWorldDirection(new THREE.Vector3());
+    var from = {
+      x: camera.position.x, y: camera.position.y, z: camera.position.z,
+      yaw: Math.atan2(d.x, -d.z) / RAD, pitch: Math.asin(clamp(d.y, -1, 1)) / RAD,
+      S: Math.max(0.3, vTgt.distanceTo(camera.position)), fov: camera.fov, cx: o.cx, cy: o.cy, near: camera.near
+    };
+    var p = wkSolve({ x: from.x, z: from.z });
+    WK.x = p.x;
+    WK.z = p.z;
+    WK.yaw = from.yaw;
+    WK.pitch = clamp(from.pitch * 0.5, -12, 12);
+    WK.vf = WK.vs = WK.vt = 0;
+    WK.keys = {};
+    WK.at = "";
+    WK.out = { y: window.scrollY };
+    WK.on = true;
+    WK.lz = "";
+    root.classList.remove("wk-back", "wk-leave");
+    root.classList.add("wk-on");
+    if (wkTouch()) root.classList.add("wk-touch");
+    wkListen(true);
+    wkPaint();
+    if (REDUCED || instant) {
+      WK.bl = null;
+      WK.w = 1;
+      if (!instant && veil) {
+        veil.classList.remove("is-cut");
+        void veil.offsetWidth;
+        veil.classList.add("is-cut");
+      }
+    } else {
+      WK.bl = { dir: "in", t0: performance.now(), dur: WALK.tIn, from: from, k: 0 };
+      WK.w = 0;
+    }
+    wkUrl(true);
+    walkLabel();
+    walkHint(true);
+    walkNear(true);
+    lastT = 0;
+    dirty = true;
+    invalidate();
+  }
+
+  /* where the guided page takes up again: the chosen place (href), or the
+     station nearest to where one stood (the entrance before the pen, the
+     end past the Glass Ball) */
+  function wkTarget(href) {
+    var id = (href || "").replace(/^#/, ""), el = id && document.getElementById(id), i;
+    if (id === "top") return { y: 0, st: null, el: null };
+    if (el === secMore) return { y: Math.max(0, Math.round(G.narrow ? (G.moreCol || G.more) - G.H * 0.12 : docTop(secMore))), st: null, el: secMore };
+    for (i = 0; i < N; i++) if (el && STN[i].sec === el) return { y: Math.round(STN[i].geo.top), st: STN[i], el: el };
+    if (WK.x < X.pen - 4.5) return { y: 0, st: null, el: null };
+    if (WK.x > X.gf + 4.5) return { y: Math.round(G.more - 0.15 * G.H), st: null, el: null };
+    var best = STN[0], bd = 1e9;
+    for (i = 0; i < N; i++) {
+      var dd = Math.abs(X[STN[i].key] - WK.x);
+      if (dd < bd) {
+        bd = dd;
+        best = STN[i];
+      }
+    }
+    return { y: Math.round(best.geo.top), st: best, el: best.sec };
+  }
+
+  function walkLeave(href, instant) {
+    if (!WK.on) return;
+    var tg = wkTarget(href), A = wkHere(), now = performance.now();
+    var from = { x: A.x, y: A.y, z: A.z, yaw: A.yaw, pitch: A.pitch, S: A.S, fov: A.fov, cx: 0.5, cy: 0.5, near: A.near };
+    if (WK.cam) for (var k in from) if (WK.cam[k] != null) from[k] = WK.cam[k];
+    WK.on = false;
+    WK.keys = {};
+    if (WK.joy) wkJoyUp({ pointerId: WK.joy.id });
+    if (WK.look) wkLookUp({ pointerId: WK.look.id });
+    walkHint(false);
+    wkListen(false);
+    window.addEventListener("wheel", wkStop, { passive: false, capture: true });
+    window.addEventListener("touchmove", wkStop, { passive: false, capture: true });
+    root.classList.remove("wk-on", "wk-touch");
+    root.classList.add("wk-leave");
+    wkPaint();
+    wkUrl(false);
+    WK.out = { y: tg.y, el: tg.el, st: tg.st, href: href };
+    /* the guided page at its place, at once; the camera goes there */
+    window.scrollTo(0, tg.y);
+    sy = tg.y;
+    T.ky = null;
+    var ch = chapter;
+    whichChapter(tg.y);
+    if (REDUCED) shown = chapter;
+    LZ.at = -9;
+    if (tg.st && !lzReady(tg.st.key)) {
+      if (REDUCED || instant) LZ.jump = tg.st.key;
+      lzWant(tg.st.key);
+    }
+    if (REDUCED || instant) {
+      WK.bl = null;
+      WK.w = 0;
+      if (veil && ch === chapter) {
+        veil.classList.remove("is-cut");
+        void veil.offsetWidth;
+        veil.classList.add("is-cut");
+      }
+      if (LZ.on) lzVeil();
+      walkDone();
+    } else {
+      var dist = Math.abs(from.x - X[tg.st ? tg.st.key : "pen"]);
+      if (!tg.st) dist = tg.y === 0 ? Math.abs(from.x + 8) : Math.abs(from.x - END_X);
+      WK.bl = { dir: "out", t0: now, dur: clamp(WALK.tOut[0] + dist / 22, WALK.tOut[0], WALK.tOut[1]), from: from, k: 0 };
+      WK.w = 1;
+    }
+    WK.at = "";
+    atKey = "";
+    lastT = 0;
+    dirty = true;
+    invalidate();
+  }
+  /* the hand-over out has arrived: the page is the guided page again */
+  function walkDone() {
+    var o = WK.out || {};
+    window.removeEventListener("wheel", wkStop, { passive: false, capture: true });
+    window.removeEventListener("touchmove", wkStop, { passive: false, capture: true });
+    root.classList.remove("wk-leave");
+    root.classList.add("wk-back");
+    setTimeout(function () {
+      root.classList.remove("wk-back");
+    }, 700);
+    WK.cam = null;
+    WK.out = null;
+    if (Math.abs(window.scrollY - (o.y || 0)) > 1) window.scrollTo(0, o.y || 0);
+    sy = window.scrollY;
+    capKey = "";
+    hudFor = null;
+    /* the index brought one here: the work takes the focus, as a jump does */
+    var f = o.st ? o.st.sec.querySelector("[data-3d]") : o.el === secMore ? secMore.querySelector("h2") : null;
+    if (f && o.href) {
+      if (!f.hasAttribute("tabindex")) f.setAttribute("tabindex", "-1");
+      f.focus({ preventScroll: true });
+    }
+    atSync();
+    dirty = true;
+    invalidate();
+  }
+  /* the room is going (context lost, the phone gave up): no walk */
+  function walkDrop() {
+    if (!WK.on && !WK.bl) return;
+    WK.on = false;
+    WK.bl = null;
+    WK.w = 0;
+    WK.cam = null;
+    wkListen(false);
+    window.removeEventListener("wheel", wkStop, { passive: false, capture: true });
+    window.removeEventListener("touchmove", wkStop, { passive: false, capture: true });
+    root.classList.remove("wk-on", "wk-touch", "wk-leave");
+    if (WK.btn) WK.btn.hidden = true;
+  }
+
+  /* ---- built once, when the room is live (never without it) ---- */
+  function walkInit() {
+    if (!WALK.on || WK.ready || G.tall) return;
+    WK.ready = true;
+    var motion = document.querySelector(".bar__motion");
+    var b = (WK.btn = document.createElement("button"));
+    b.type = "button";
+    b.className = "bar__walk";
+    /* (on a phone the header has room for a glyph, not the word: rooms.css) */
+    b.innerHTML =
+      '<span class="bar__walk-dot" aria-hidden="true"></span><span class="bar__walk-l">Walk</span>' +
+      '<svg class="bar__walk-i" viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" focusable="false"><circle cx="13" cy="4.6" r="1.9" fill="currentColor"/><path d="M12.2 8.2 10.6 14.2M12 9.4l3.3 2.6M11.6 9.6 8.4 12.2M10.6 14.2l3.2 2.7.4 4.4M10.6 14.2 8.2 20.6" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+    b.addEventListener("click", function () {
+      if (WK.on) walkLeave(null);
+      else walkEnter(false);
+    });
+    if (motion && motion.parentNode) motion.parentNode.insertBefore(b, motion);
+    else (document.querySelector(".bar") || document.body).appendChild(b);
+    wkPaint();
+
+    var lab = document.createElement("p");
+    lab.className = "wk-label";
+    lab.setAttribute("aria-live", "polite");
+    lab.innerHTML = '<span class="wk-label__n eyebrow"></span><span class="wk-label__t"></span>';
+    document.body.appendChild(lab);
+    WK.el.label = { box: lab, n: lab.querySelector(".wk-label__n"), t: lab.querySelector(".wk-label__t") };
+
+    var hint = document.createElement("p");
+    hint.className = "wk-hint";
+    hint.hidden = true;
+    hint.setAttribute("role", "status");
+    hint.innerHTML =
+      '<span class="wk-hint__desk">Arrow keys or W A S D to walk, Shift to go faster · drag to look round · the index above takes you to a work · Esc leaves</span>' +
+      '<span class="wk-hint__ph">The ring below: up to walk, to the side to turn · drag anywhere else to look · Index takes you to a work</span>';
+    document.body.appendChild(hint);
+    WK.el.hint = hint;
+
+    var joy = document.createElement("div");
+    joy.className = "wk-joy";
+    joy.setAttribute("role", "group");
+    joy.setAttribute("aria-roledescription", "joystick");
+    joy.setAttribute(
+      "aria-label",
+      WALK.joy === "strafe" ? "Walk: drag up to go forward, down to go back, to the side to step sideways" : "Walk: drag up to go forward, down to go back, to the side to turn"
+    );
+    joy.innerHTML = '<span class="wk-joy__ring" aria-hidden="true"></span><span class="wk-joy__knob" aria-hidden="true"></span>';
+    document.body.appendChild(joy);
+    WK.el.joy = joy;
+    WK.el.knob = joy.querySelector(".wk-joy__knob");
+    joy.addEventListener("pointerdown", wkJoyDown);
+    joy.addEventListener("pointermove", wkJoyMove);
+    joy.addEventListener("pointerup", wkJoyUp);
+    joy.addEventListener("pointercancel", wkJoyUp);
+    joy.addEventListener("lostpointercapture", wkJoyUp);
+    joy.addEventListener("contextmenu", function (e) {
+      e.preventDefault();
+    });
+
+    document.addEventListener("click", wkClick, true);
+
+    /* for checking by hand and by the scripts */
+    window.__rooms.walk = {
+      cfg: WALK,
+      out: WK_OUT,
+      enter: function (instant) {
+        walkEnter(!!instant);
+      },
+      leave: function (href, instant) {
+        walkLeave(href || null, !!instant);
+      },
+      /* put the visitor anywhere (solved: never inside a keep-out) */
+      set: function (x, z, yaw, pitch) {
+        var p = wkSolve({ x: x, z: z });
+        WK.x = p.x;
+        WK.z = p.z;
+        if (yaw != null) WK.yaw = yaw;
+        if (pitch != null) WK.pitch = clamp(pitch, WALK.pitch[0], WALK.pitch[1]);
+        WK.lz = "";
+        if (WK.on) {
+          walkLabel();
+          walkNear(true);
+        }
+        invalidate();
+        return [+WK.x.toFixed(3), +WK.z.toFixed(3)];
+      },
+      free: wkFree,
+      state: function () {
+        var c = camera.position;
+        return {
+          on: WK.on, blend: WK.bl ? WK.bl.dir + " " + WK.bl.k.toFixed(2) : null, w: +WK.w.toFixed(3),
+          x: +WK.x.toFixed(3), z: +WK.z.toFixed(3), yaw: +WK.yaw.toFixed(1), pitch: +WK.pitch.toFixed(1),
+          v: [+WK.vf.toFixed(2), +WK.vs.toFixed(2), +WK.vt.toFixed(1)], cam: [+c.x.toFixed(3), +c.y.toFixed(3), +c.z.toFixed(3)],
+          fov: +camera.fov.toFixed(1), near: camera.near, at: WK.at, label: WK.el.label && WK.el.label.box.classList.contains("is-on") ? WK.el.label.t.textContent : "",
+          level: +levelNow.toFixed(3), fog: +scene.fog.density.toFixed(4), exposure: +renderer.toneMappingExposure.toFixed(3),
+          dof: FX ? { S: +DOF.S.toFixed(2), K: +DOF.Kc.toFixed(4), on: dofLive() } : null, pictures: nPose, scrollY: window.scrollY
+        };
+      },
+      /* frame times (ms) of the frames drawn while walking; reset: true clears */
+      frames: function (reset) {
+        var a = WK.ft.slice().sort(function (p, q) { return p - q; }), n = a.length;
+        var r = n ? { n: n, mean: +(a.reduce(function (s, v) { return s + v; }, 0) / n).toFixed(2), p50: +a[Math.floor(n * 0.5)].toFixed(2), p95: +a[Math.floor(n * 0.95)].toFixed(2), p99: +a[Math.floor(n * 0.99)].toFixed(2), max: +a[n - 1].toFixed(2), over25: a.filter(function (v) { return v > 25; }).length } : { n: 0 };
+        if (reset) WK.ft = [];
+        return r;
+      },
+      /* the built works in plan, for setting the keep-outs: each mesh's
+         world box near each station (the room's own surfaces left out) */
+      boxes: function (each) {
+        var out = {}, bb = new THREE.Box3(), list = [];
+        scene.updateMatrixWorld(true);
+        scene.traverse(function (o) {
+          if (!o.isMesh || !o.visible) return;
+          var p = o;
+          while (p) {
+            if (!p.visible) return;
+            p = p.parent;
+          }
+          bb.setFromObject(o);
+          if (bb.isEmpty()) return;
+          var sx = bb.max.x - bb.min.x, sz = bb.max.z - bb.min.z, syy = bb.max.y - bb.min.y;
+          if (sx > 6 || sz > 6 || syy > 4.3) return; /* the room */
+          if (bb.max.z < 0.02 || bb.min.y > CEIL - 0.3) return; /* on the wall's face, at the ceiling */
+          if (syy < 0.004 && bb.min.y < 0.01) return; /* flat on the floor (light patches) */
+          var c = (bb.min.x + bb.max.x) / 2, key = null, bd = 4;
+          for (var k in X) if (Math.abs(X[k] - c) < bd) { bd = Math.abs(X[k] - c); key = k; }
+          if (!key) return;
+          if (each === key) list.push([o.name || (o.parent && o.parent.name) || o.geometry.type, +bb.min.x.toFixed(2), +bb.max.x.toFixed(2), +bb.min.y.toFixed(2), +bb.max.y.toFixed(2), +bb.min.z.toFixed(2), +bb.max.z.toFixed(2)].join(" "));
+          var e = out[key] || (out[key] = { x0: 1e9, x1: -1e9, y0: 1e9, y1: -1e9, z0: 1e9, z1: -1e9, n: 0 });
+          e.x0 = Math.min(e.x0, bb.min.x); e.x1 = Math.max(e.x1, bb.max.x);
+          e.y0 = Math.min(e.y0, bb.min.y); e.y1 = Math.max(e.y1, bb.max.y);
+          e.z0 = Math.min(e.z0, bb.min.z); e.z1 = Math.max(e.z1, bb.max.z);
+          e.n++;
+        });
+        if (each) return list;
+        for (var k2 in out) for (var f in out[k2]) out[k2][f] = +(+out[k2][f]).toFixed(3);
+        return out;
+      }
+    };
   }
 
   /* ============================================================
@@ -10213,6 +11184,7 @@
     canvas.addEventListener("webglcontextlost", function (e) {
       e.preventDefault();
       live = false;
+      walkDrop(); /* WALK */
       root.classList.remove("gl"); /* the stills come back */
       root.classList.remove("gl-soon");
       loadDone("lost");
@@ -10486,7 +11458,9 @@
     };
     invalidate();
     lzNear();
+    walkInit(); /* WALK: the control in the header (and ?mode=walk) */
     loadReady();
+    if (WK.ready && Q.get("mode") === "walk") walkEnter(true);
   }
 
   /* LOADING: the first screen is right. The room is live and html.gl is on
