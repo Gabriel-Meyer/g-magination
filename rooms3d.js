@@ -3463,6 +3463,16 @@
      panel when it comes off in the take-apart. Live: __rooms.srSpot, then
      __rooms.srSpotApply(). */
   var SR_SPOT = { from: [-3.2, 0.3, 7.4], color: 0xfff1e2, spec: 0.45, rough: 0.65, cap: 0.1, diffuse: 0.3, inner: 6, outer: 16 };
+  /* PHOTO PASS (notes/photo-lr01.md). SR_BIRCH_GLOW: the wall's glow
+     coming back onto the birch, from all round (was [0.62, 0.55, 0.46]: the
+     birch read a saturated yellow; in sr01/01, 03 and 06 it is a pale cream
+     beside a near-neutral wall). SR_RIM_LIT: how much more of that light
+     the front rim of the body (its ply edge, 18 mm behind the steel, level
+     with the top tier's tape) takes: in sr01/06 it is the hard bright line
+     along the gap. Light on the wood, not an emitter: no glow. */
+  var SR_BIRCH_GLOW = [0.62, 0.58, 0.56];
+  var SR_BIRCH_TINT = 0xe0e6f0; /* the birch face texture is the chair's, warmer than this lamp's board: tinted back to its pale cream (was 0xf4ecdf; the photo pass set 0xeef5ff; the artist then: "das holz kann ein ganz kleines bisschen dunkler werden", so 6 % down) */
+  var SR_RIM_LIT = 6;
   var srSpotU = null;
   function srSpotApply() {
     if (!srSpotU) return;
@@ -3565,7 +3575,7 @@
       g.add(model);
       at = emitCentre(g, at);
       /* the wall's glow coming back onto the wood, from all round */
-      var GLOW_BACK = [0.62, 0.55, 0.46];
+      var GLOW_BACK = SR_BIRCH_GLOW;
       var steel = new THREE.MeshPhysicalMaterial({
         name: "MAT-raw_steel", color: 0x8e9197, metalness: 1, roughness: 0.4, envMap: steelEnv(), envMapIntensity: 0.85,
         anisotropy: 0.5, anisotropyRotation: Math.PI / 2, normalMap: warpMap(), normalScale: new THREE.Vector2(1, 1)
@@ -3598,7 +3608,7 @@
         return "sr-steel-edge";
       };
       srSpot(steel, at); /* LR01's spot (SR_SPOT) */
-      var ply = new THREE.MeshStandardMaterial({ name: "MAT-birch_ply", map: tPly || birchTexture(), color: tPly ? 0xf4ecdf : 0xe9e0d0, roughness: 0.6, envMapIntensity: 0.04 });
+      var ply = new THREE.MeshStandardMaterial({ name: "MAT-birch_ply", map: tPly || birchTexture(), color: tPly ? SR_BIRCH_TINT : 0xe9e0d0, roughness: 0.6, envMapIntensity: 0.04 });
       if (tPly) {
         ply.map = tPly.clone();
         ply.map.wrapS = ply.map.wrapT = THREE.RepeatWrapping;
@@ -3608,7 +3618,7 @@
       ply.vertexColors = true;
       tame(ply, 0.0025, 1.0, GLOW_BACK);
       var rim = new THREE.MeshStandardMaterial({ name: "MAT-birch_ply_edge", map: plies(13, 1), roughness: 0.66, envMapIntensity: 0.03 });
-      tame(rim, 0.0025, 1.0, GLOW_BACK);
+      tame(rim, 0.0025, 1.0, GLOW_BACK.map(function (v) { return v * SR_RIM_LIT; }));
       model.traverse(function (o) {
         if (!o.isMesh) return;
         var n = o.name, mn = (o.material && o.material.name) || "", m, d = 0, t0 = 0;
@@ -5549,6 +5559,28 @@
   /* the wool blanket in the seat (his photograph 02, "In use"): false
      removes it, its shadow and its file request in one edit */
   var CHAIR_BLANKET = true;
+  /* the photo pass (notes/photo-chair.md): the chair's materials and its
+     shadow, in one place. steel: color, metalness, roughness, env; face:
+     the plywood's tint; vary: each panel's shade of it (seat, back, sides
+     in the file's order); bump: the photo as a bump map; cut: the plies */
+  var FC_LIFT = 0.006;
+  var FCP = {
+    /* (the artist: "metall einen tick heller und ein bisschen glänzend": was
+       0x5a5d61, roughness 0.32, reflection 1.15) */
+    steel: [0x6c6f74, 0.9, 0.24, 1.3],
+    face: 0x989690,
+    vary: [1.0, 1.04, 0.97, 1.01],
+    bump: 0.12,
+    cut: 0xcfc6b4,
+    /* the floor shadow: size (m), canvas px, blur of shell and blanket (m),
+       how dark the can's shadow is, how dark under the hollow */
+    shadow: [3.6, 512, 0.05, 0.5, 0.3],
+    /* the floor's light on the faces turned down: colour, strength */
+    bounce: [0xd8cbb8, 0.8],
+    /* the can's cone, inner and outer half-angle (was 22 / 40: a pool with
+       no centre and no edge) */
+    cone: [18, 28]
+  };
   /* media/models/chair-blanket.glb (tools/models/chair-blanket-build.py, a
      cloth simulation on this chair; notes/chair.md), in the chair's own
      frame: added to the chair's group, it turns with it. Dark warm wool,
@@ -5597,17 +5629,31 @@
       color: 0x25180f, map: heather, roughness: 0.97, metalness: 0, vertexColors: true, bumpMap: fuzz, bumpScale: 0.5,
       sheen: 0.5, sheenRoughness: 0.9, sheenColor: new THREE.Color(0x5a4232), envMapIntensity: 0.12, side: THREE.DoubleSide
     }), S);
-    /* the fringe: knotted cords, 8 per 10 cm, thinning to their tips */
+    /* the fringe: twisted cords, 12 per 10 cm, of uneven length, tapering
+       to their tips. PHOTO PASS: was 8 per 10 cm, hard cut-outs without
+       mipmaps, which shimmered as a serrated comb; now soft-edged, mipmapped
+       and resolved by the multisampled scene target (alpha to coverage), so
+       at a distance the cords go to a fine fringe, close by they are cords */
     var f = document.createElement("canvas");
-    f.width = 64; f.height = 64;
+    f.width = 96;
+    f.height = 128;
     var fx = f.getContext("2d");
     fx.fillStyle = "#000";
-    fx.fillRect(0, 0, 64, 64);
-    fx.fillStyle = "#fff";
-    for (i = 0; i < 2; i++) {
-      var cx = 16 + i * 32;
+    fx.fillRect(0, 0, 96, 128);
+    for (i = 0; i < 3; i++) {
+      var cx = 16 + i * 32 + (hash(i * 5.1 + 2) - 0.5) * 8, len = 128 * (0.84 + 0.16 * hash(i * 3.3 + 1)), w0 = 11;
+      var gr = fx.createLinearGradient(cx - w0, 0, cx + w0, 0);
+      gr.addColorStop(0, "rgba(255,255,255,0)");
+      gr.addColorStop(0.18, "#fff");
+      gr.addColorStop(0.82, "#fff");
+      gr.addColorStop(1, "rgba(255,255,255,0)");
+      fx.fillStyle = gr;
       fx.beginPath();
-      fx.moveTo(cx - 12, 0); fx.lineTo(cx + 12, 0); fx.lineTo(cx + 7, 12); fx.lineTo(cx + 6, 58); fx.lineTo(cx, 64); fx.lineTo(cx - 6, 58); fx.lineTo(cx - 7, 12);
+      fx.moveTo(cx - w0 - 3, 0); fx.lineTo(cx + w0 + 3, 0);
+      fx.quadraticCurveTo(cx + w0, 14, cx + 8, len * 0.45);
+      fx.lineTo(cx + 4, len); fx.lineTo(cx - 4, len);
+      fx.lineTo(cx - 8, len * 0.45);
+      fx.quadraticCurveTo(cx - w0, 14, cx - w0 - 3, 0);
       fx.closePath();
       fx.fill();
     }
@@ -5615,9 +5661,8 @@
     cords.wrapS = THREE.RepeatWrapping;
     cords.repeat.set(1 / 0.025, 1);
     cords.flipY = false;
-    cords.generateMipmaps = false; /* (mipmaps average the cords away into a grey veil) */
-    cords.minFilter = THREE.LinearFilter;
-    var fr = lit(new THREE.MeshStandardMaterial({ color: 0x1c120c, roughness: 0.96, alphaMap: cords, alphaTest: 0.5, side: THREE.DoubleSide, envMapIntensity: 0.1 }), S);
+    cords.anisotropy = aniso();
+    var fr = lit(new THREE.MeshStandardMaterial({ color: 0x2e1e14, roughness: 0.96, alphaMap: cords, alphaTest: 0.35, alphaToCoverage: true, side: THREE.DoubleSide, envMapIntensity: 0.1 }), S);
     var shade = new THREE.MeshBasicMaterial({ color: 0xffffff, vertexColors: true, transparent: true, opacity: 0.78, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 });
     return loadModel(Loader, "media/models/chair-blanket.glb").then(function (got) {
       var list = [];
@@ -5640,6 +5685,66 @@
       });
     });
   }
+  /* PHOTO PASS: what the chair's raw steel sees. The shared studio map is
+     the lamps' (orange softboxes, for chrome by a lit lamp); in it this grey
+     steel turned pink-brown. His photographs show neutral grey bar with pale
+     lines along it: a quiet grey room, the lit floor below, a pale ceiling,
+     a few soft upright lights far off (the lines down the posts). Built
+     once, a small PMREM, like the pen's. */
+  /* PHOTO PASS: the floor's light thrown back up. In his photographs the
+     outsides and undersides of the panels are a quiet mid tone (02: pale
+     grey-beige under the shell), never near black; in the room they faced
+     only the dark ground of the hemisphere. Faces turned down or out get a
+     little of the lit floor's colour as indirect light (to be chained under
+     lit(), which keeps what was set here) */
+  function fcBounce(mat) {
+    var key = "|fcb";
+    var fn = function (sh) {
+      sh.uniforms.fcB = { value: new THREE.Color(FCP.bounce[0]).multiplyScalar(FCP.bounce[1]) };
+      sh.fragmentShader = sh.fragmentShader
+        .replace("#include <common>", "#include <common>\nuniform vec3 fcB;")
+        .replace(
+          "#include <lights_fragment_end>",
+          "#include <lights_fragment_end>\n{ vec3 fcN = inverseTransformDirection(normal, viewMatrix);\n" +
+            " reflectedLight.indirectDiffuse += BRDF_Lambert(diffuseColor.rgb) * fcB * (0.25 + 0.75 * clamp(-fcN.y, 0.0, 1.0)) * (1.0 - smoothstep(0.0, 0.7, fcN.y)); }\n"
+        );
+    };
+    mat.userData.obc = fn;
+    mat.userData.obcKey = key;
+    mat.onBeforeCompile = fn;
+    return mat;
+  }
+  function fcEnv() {
+    var s = new THREE.Scene();
+    s.add(
+      new THREE.Mesh(
+        new THREE.SphereGeometry(30, 32, 16),
+        new THREE.ShaderMaterial({
+          side: THREE.BackSide,
+          vertexShader:
+            "varying vec3 p;\nvoid main(){ p = position;" +
+            " gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.0); }",
+          fragmentShader:
+            "varying vec3 p;\nvoid main(){" +
+            " vec3 d = normalize(p);" +
+            " vec3 c = mix(vec3(0.075,0.072,0.07), vec3(0.3,0.295,0.29), smoothstep(0.35, 0.95, d.y));" +
+            " if (d.y < 0.0) c = mix(c, mix(vec3(0.34,0.31,0.28), vec3(0.2,0.185,0.17), smoothstep(-0.1, -0.8, d.y)), smoothstep(0.0, -0.08, d.y));" +
+            " gl_FragColor = vec4(c, 1.0); }"
+        })
+      )
+    );
+    [[-50, 1.4, 1.5], [20, 0.5, 2.2], [115, 1.0, 1.2], [-140, 0.6, 1.4]].forEach(function (b) {
+      var a = b[0] * RAD;
+      var m = new THREE.Mesh(new THREE.PlaneGeometry(b[1], 9), new THREE.MeshBasicMaterial({ color: new THREE.Color(0xf4f2ee).multiplyScalar(b[2]), side: THREE.DoubleSide }));
+      m.position.set(Math.sin(a) * 10, 2, Math.cos(a) * 10);
+      m.lookAt(0, 2, 0);
+      s.add(m);
+    });
+    var pm = new THREE.PMREMGenerator(renderer);
+    var tex = pm.fromScene(s, 0).texture;
+    pm.dispose();
+    return tex;
+  }
   async function buildChair(Loader) {
     var x0 = X.fc + 0.1, z0 = 1.55;
     /* the gallery light: one can, from the left and above and a little in
@@ -5649,25 +5754,33 @@
        chair: the same light on the same facets whichever way it faces) */
     var lr = FC_ROT + 0.5, lc = Math.cos(lr), ls = Math.sin(lr);
     var LP = [x0 - 1.9 * lc + 1.7 * ls, CEIL - 0.24, z0 + 1.9 * ls + 1.7 * lc];
-    var S = localLight({ pos: LP, at: [x0, 0.5, z0], inner: 22, outer: 40, color: 0xfff0dc, power: 34, range: 8 });
+    var S = localLight({ pos: LP, at: [x0, 0.5, z0], inner: FCP.cone[0], outer: FCP.cone[1], color: 0xfff0dc, power: 34, range: 8 });
     trackSpot(S, 1.2);
     patch(S, "floor", x0 - 4.4, x0 + 4.4, 0, 6.2);
     patch(S, "wall", x0 - 4.2, x0 + 4.2, 0, 2.4);
     patch(S, "skirt", x0 - 4.2, x0 + 4.2);
     var g = new THREE.Group();
-    g.position.set(x0, 0, z0);
+    /* FC_LIFT: the drawn shadow is a sheet that has to lie 6 mm over the floor
+       (nearer, it fights the floor's depth on a phone). With the chair on the
+       floor itself the sheet covered the lower third of the 18 mm bar of the
+       floor frame, and the artist saw it: "das gestell unten ist halb im
+       boden". So the chair stands on the sheet's plane: the sheet is at the
+       group's own y = 0 and the group is lifted by its 6 mm. */
+    g.position.set(x0, FC_LIFT, z0);
     g.rotation.y = FC_ROT;
     scene.add(g);
     CONTACT.refs.chair = g;
 
     /* its shadow on the floor: the shell's (soft, thrown away from the can:
        each corner of the rim by its own height), a deeper one under the
-       hollow, and a close dark line beside every bar of the frame */
+       hollow, and a close dark line beside every bar of the frame
+       (photo pass: now only for the stand-in; the model gets castShadow()) */
+    function drawnShadow() {
     var cs = Math.cos(FC_ROT), sn = Math.sin(FC_ROT), lx = (x0 - LP[0]) / LP[1], lz = (z0 - LP[2]) / LP[1];
     var ox = lx * cs - lz * sn, oz = lx * sn + lz * cs; /* shadow run per metre of height, in the chair's own axes */
     var SH = 2.6;
     var shadow = new THREE.Mesh(
-      quad([-SH / 2, 0.006, SH / 2, SH / 2, 0.006, SH / 2, SH / 2, 0.006, -SH / 2, -SH / 2, 0.006, -SH / 2], [0, 1, 0], [0, 0, 1, 0, 1, 1, 0, 1]),
+      quad([-SH / 2, 0, SH / 2, SH / 2, 0, SH / 2, SH / 2, 0, -SH / 2, -SH / 2, 0, -SH / 2], [0, 1, 0], [0, 0, 1, 0, 1, 1, 0, 1]),
       shadeCanvas(256, function (c, N, soft) {
         function px(x, z, h) {
           return [(x + ox * h + SH / 2) / SH * N, (z + oz * h + SH / 2) / SH * N];
@@ -5704,6 +5817,96 @@
     );
     shadow.renderOrder = 2;
     g.add(shadow);
+    }
+
+    /* PHOTO PASS: THE SHADOW OF WHAT IS THERE. In his photographs the shell
+       throws one soft dark shape on the floor and every post a thin line of
+       its own; the drawn shadow above was a dark mat the size of the frame.
+       Here every triangle of the panels, the frame and the blanket is
+       projected from the can (LP, a point) onto the floor and painted, once,
+       into a canvas laid on the floor: the shell and the blanket soft (they
+       are high), the frame sharp (it is low), and under the hollow the
+       room's own soft light shut out (as before). No light, no pass: one
+       drawn quad, as before. */
+    function castShadow(list) {
+      g.updateMatrixWorld(true);
+      var L = g.worldToLocal(V3(LP[0], LP[1], LP[2])), SH = FCP.shadow[0], N = FCP.shadow[1];
+      var p = V3(0, 0, 0);
+      function tris(c, test) {
+        c.beginPath();
+        list.forEach(function (o) {
+          if (!test(o.name)) return;
+          var pos = o.geometry.attributes.position, ix = o.geometry.index, n = ix ? ix.count : pos.count, k, q = [];
+          for (k = 0; k < n; k++) {
+            p.fromBufferAttribute(pos, ix ? ix.getX(k) : k);
+            var t = L.y / Math.max(0.05, L.y - p.y);
+            q.push(((L.x + (p.x - L.x) * t + SH / 2) / SH) * N, ((L.z + (p.z - L.z) * t + SH / 2) / SH) * N);
+            if (q.length < 6) continue;
+            /* every triangle wound the same way, so the fill is their union */
+            var ar = (q[2] - q[0]) * (q[5] - q[1]) - (q[3] - q[1]) * (q[4] - q[0]);
+            if (ar > 0) q = [q[0], q[1], q[4], q[5], q[2], q[3]];
+            c.moveTo(q[0], q[1]);
+            c.lineTo(q[2], q[3]);
+            c.lineTo(q[4], q[5]);
+            c.closePath();
+            q = [];
+          }
+        });
+        c.fill();
+      }
+      var m = new THREE.Mesh(
+        quad([-SH / 2, 0, SH / 2, SH / 2, 0, SH / 2, SH / 2, 0, -SH / 2, -SH / 2, 0, -SH / 2], [0, 1, 0], [0, 0, 1, 0, 1, 1, 0, 1]),
+        shadeCanvas(N, function (c, N, soft) {
+          var f = N / SH; /* px per metre */
+          /* the room's soft light, shut out under the hollow */
+          soft(function () {
+            c.beginPath();
+            c.ellipse(N / 2, N / 2 - 0.02 * f, 0.5 * f, 0.56 * f, 0, 0, 6.3);
+            c.fill();
+          }, 0.3 * f, FCP.shadow[4]);
+          /* the can's light: one shadow, the union of the shell and the
+             blanket (soft) and the frame (sharp), painted black on white
+             apart (where two overlap it is no darker: one light, shut out
+             once), then laid on as its darkness */
+          var tc = document.createElement("canvas");
+          tc.width = tc.height = N;
+          var t = tc.getContext("2d");
+          t.fillStyle = "#fff";
+          t.fillRect(0, 0, N, N);
+          function blurred(test, blur) {
+            t.save();
+            t.shadowColor = "#000";
+            t.shadowBlur = blur;
+            t.shadowOffsetX = N * 3;
+            t.translate(-N * 3, 0);
+            t.fillStyle = "#000";
+            tris(t, test);
+            t.restore();
+          }
+          blurred(function (nm) { return /FC-panel|FC-blanket$|FC-blanket_fringe/.test(nm); }, FCP.shadow[2] * f);
+          blurred(function (nm) { return /FC-base/.test(nm); }, 0.008 * f);
+          /* only where the can's light falls: a shadow outside its cone
+             would darken floor it never lit */
+          var D = g.worldToLocal(S.pos.clone().add(S.dir)).sub(L).normalize();
+          var co = Math.cos(FCP.cone[1] * RAD), ci = Math.cos(FCP.cone[0] * RAD);
+          var im = t.getImageData(0, 0, N, N), d = im.data, k, x, y, vx, vz, cc;
+          for (k = 0; k < d.length; k += 4) {
+            x = ((k / 4) % N + 0.5) / N * SH - SH / 2;
+            y = (Math.floor(k / 4 / N) + 0.5) / N * SH - SH / 2;
+            vx = x - L.x;
+            vz = y - L.z;
+            cc = (vx * D.x - L.y * D.y + vz * D.z) / Math.sqrt(vx * vx + L.y * L.y + vz * vz);
+            cc = Math.min(1, Math.max(0, (cc - co) / (ci - co)));
+            d[k + 3] = (255 - d[k]) * FCP.shadow[3] * cc * cc * (3 - 2 * cc);
+            d[k] = d[k + 1] = d[k + 2] = 0;
+          }
+          t.putImageData(im, 0, 0);
+          c.drawImage(tc, 0, 0);
+        })
+      );
+      m.renderOrder = 2;
+      g.add(m);
+    }
 
     /* satin steel: drawn bar, not chrome. It needs something to reflect or
        it is a dark line on a dark floor: the studio map at half strength,
@@ -5714,15 +5917,25 @@
        sheen from the studio map and the can's highlight along each bar, so it
        never goes to a black silhouette. To go back to the pale satin steel:
        FC_STEEL = { color: 0xa6a6a4, metalness: 1, roughness: 0.4, envMapIntensity: 0.42 } */
-    var FC_STEEL = { color: 0x4a4846, metalness: 0.85, roughness: 0.48, envMapIntensity: 0.9 };
+    /* PHOTO PASS (notes/photo-chair.md): his photographs (02 side on, 03
+       daylight) show neutral grey steel with a bright line along every bar;
+       0x4a4846 at 0.48 rendered as matte brown paint under the warm can. A
+       lighter grey, smoother, with the studio map at full strength: the can
+       and the room run along the tubes as a highlight. Was:
+       { color: 0x4a4846, metalness: 0.85, roughness: 0.48, envMapIntensity: 0.9 } */
+    var FC_STEEL = { color: FCP.steel[0], metalness: FCP.steel[1], roughness: FCP.steel[2], envMapIntensity: FCP.steel[3] };
     var rodMat = new THREE.MeshStandardMaterial(FC_STEEL);
+    rodMat.envMap = fcEnv();
     lit(rodMat, S);
 
     if (has("folded-chair")) {
       var got = await Promise.all([loadModel(Loader, "media/models/folded-chair.glb"), extraTex("birch-ply-face")]);
       var model = got[0].scene, photo = got[1];
-      var cut = new THREE.MeshStandardMaterial({ map: plies(17, 1 / 0.384), color: 0xa39c8c, roughness: 0.62, envMapIntensity: 0.03 });
-      lit(cut, S);
+      /* (photo pass: the plies read on every rim in his photographs; at
+         0xa39c8c they were a faint stripe. Lighter, so light and dark plies
+         both show) */
+      var cut = new THREE.MeshStandardMaterial({ map: plies(17, 1 / 0.384), color: FCP.cut, roughness: 0.62, envMapIntensity: 0.03 });
+      lit(fcBounce(cut), S);
       var n = 0;
       function faceMat() {
         var t, m;
@@ -5736,7 +5949,14 @@
              of warmth on top, because the photograph is in open shade */
           /* (held down against the room's soft light, which has no direction,
              so that the can's light, which has one, models the facets) */
-          m = new THREE.MeshStandardMaterial({ map: t, bumpMap: t, bumpScale: 0.6, color: 0x9a927f, roughness: 0.46, envMapIntensity: 0.07 });
+          /* PHOTO PASS: in his photographs each panel is one even tone set by
+             how it faces the light, the figure faint; the picture as a bump
+             map at 0.6 broke every face into dark blotches, so it is down to a
+             touch, and each panel gets its own slight shade (sheets of birch
+             are never quite alike: the seat in 03 is a little warmer than the
+             back). Was color 0x9a927f, bumpScale 0.6. */
+          var tint = new THREE.Color(FCP.face).multiplyScalar(FCP.vary[n % FCP.vary.length]);
+          m = new THREE.MeshStandardMaterial({ map: t, bumpMap: t, bumpScale: FCP.bump, color: tint, roughness: 0.46, envMapIntensity: 0.07 });
         } else {
           t = birchTexture().clone();
           t.center.set(0, 0);
@@ -5745,7 +5965,7 @@
           m = new THREE.MeshStandardMaterial({ map: t, roughness: 0.5, envMapIntensity: 0.05 });
         }
         n++;
-        return lit(m, S);
+        return lit(fcBounce(m), S);
       }
       var meshes = [];
       model.traverse(function (o) {
@@ -5786,9 +6006,15 @@
       });
       g.add(model);
       if (CHAIR_BLANKET) await chairBlanket(Loader, g, S).catch(function () {});
+      var parts = [];
+      g.traverse(function (o) {
+        if (o.isMesh && /^FC-/.test(o.name) && !/shadow/.test(o.name)) parts.push(o);
+      });
+      castShadow(parts);
       return;
     }
 
+    drawnShadow();
     /* STAND-IN (only if the file is missing): a seat, a back and two wings
        of plywood on a rod frame, standing as the chair stands */
     var T = 0.024, SEAT_H = 0.345, TILT = 10 * RAD;
