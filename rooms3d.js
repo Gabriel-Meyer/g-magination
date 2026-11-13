@@ -3382,8 +3382,10 @@
        moves as you do. The lamp's own light never falls on its face.
      - The plywood sides take the wall's glow, warm, and show their plies.
      THE TAKE-APART is written against part names: everything moves OUT from
-     the wall along +z (the steel first, then the tiers stepping out one by
-     one, LED bands lit throughout), nothing moves toward it or downward. As
+     the wall along +z (the steel first, then the LED carrier: the smaller
+     frame with the wedges glued round it and the tape on the wedges, lit
+     throughout; the box, white inside, stays), nothing moves toward it or
+     downward. As
      the steel leaves, the halo, which is the steel's doing, widens and
      falls away, and the bare tape lights the room instead. ---- */
   function steelEnv() {
@@ -3473,6 +3475,15 @@
   var SR_BIRCH_GLOW = [0.62, 0.58, 0.56];
   var SR_BIRCH_TINT = 0xe0e6f0; /* the birch face texture is the chair's, warmer than this lamp's board: tinted back to its pale cream (was 0xf4ecdf; the photo pass set 0xeef5ff; the artist then: "das holz kann ein ganz kleines bisschen dunkler werden", so 6 % down) */
   var SR_RIM_LIT = 6;
+  /* THE INSIDE (notes/photo-lr01.md, "The inside"): the box is white inside;
+     SR_INSIDE_LIT: how much more of the glow its inner faces take (the tape
+     is centimetres away; was 6 on the birch); the take-apart: how far the
+     LED carrier (frame, wedges, tape) comes out of the box, and how far
+     the wedges then step off the frame (m). */
+  var SR_INSIDE_WHITE = 0xe8e6e0;
+  var SR_INSIDE_LIT = 6;
+  var SR_CARRIER_OUT = 0.2;
+  var SR_WEDGES_OFF = 0;
   var srSpotU = null;
   function srSpotApply() {
     if (!srSpotU) return;
@@ -3615,47 +3626,56 @@
         ply.map.repeat.set(1 / 0.48, 1 / 0.29);
         ply.map.needsUpdate = true;
       }
-      ply.vertexColors = true;
       tame(ply, 0.0025, 1.0, GLOW_BACK);
       var rim = new THREE.MeshStandardMaterial({ name: "MAT-birch_ply_edge", map: plies(13, 1), roughness: 0.66, envMapIntensity: 0.03 });
       tame(rim, 0.0025, 1.0, GLOW_BACK.map(function (v) { return v * SR_RIM_LIT; }));
+      /* THE INSIDE OF THE BOX IS WHITE (the artist: "wenn die led streifen
+         aus der box gehen ist das innere nicht mehr holz sondern weiß"):
+         the four inner faces (a skin in the model, SR01-body_inside), the
+         back board, and the smaller frame in the middle (white like the
+         box in his film: an estimate, see notes/photo-lr01.md). */
+      var white = new THREE.MeshStandardMaterial({ name: "MAT-white_inside", color: SR_INSIDE_WHITE, roughness: 0.75, envMapIntensity: 0.04 });
+      white.vertexColors = true;
+      tame(white, 0.0025, 1.0, GLOW_BACK);
       model.traverse(function (o) {
         if (!o.isMesh) return;
-        var n = o.name, mn = (o.material && o.material.name) || "", m, d = 0, t0 = 0;
+        var n = o.name, mn = (o.material && o.material.name) || "", m, d = 0, t0 = 0, d2 = 0, t2 = 0;
         if (/raw_steel/.test(mn) || /SR01-panel/.test(n)) o.material = steel;
         else if (/birch_ply_edge/.test(mn)) o.material = rim;
-        else if (/birch_ply/.test(mn)) {
-          o.material = ply;
-          /* THE INSIDE OF THE BODY IS LIT HARD by four bands of tape a few
+        else if (/birch_ply/.test(mn)) o.material = ply;
+        else if (/white_inside/.test(mn)) {
+          o.material = white;
+          /* THE INSIDE OF THE BODY IS LIT HARD by the tape a few
              centimetres away; the outside only by the wall's glow. Seen
              through the 18 mm slot, that lit inside is the razor-thin bright
-             line along the steel's edge in his photographs. The faces that
-             look inward (and the back board) are marked in vertex colour,
-             and take four times the light. */
+             line along the steel's edge in his photographs. The box's inner
+             faces and the back board's front take SR_INSIDE_LIT times the
+             light; the frame, which the tape faces away from, does not. */
           var gp = o.geometry.attributes.position, gn = o.geometry.attributes.normal, col = new Float32Array(gp.count * 3);
           for (var vi = 0; vi < gp.count; vi++) {
-            var inward = /SR01-back/.test(n) ? gn.getZ(vi) > 0.5 : gn.getX(vi) * gp.getX(vi) + gn.getY(vi) * gp.getY(vi) < -0.05;
-            col[vi * 3] = col[vi * 3 + 1] = col[vi * 3 + 2] = inward ? 6 : 1;
+            var inward = /SR01-back/.test(n) ? gn.getZ(vi) > 0.5 : /SR01-body_inside/.test(n) && gn.getX(vi) * gp.getX(vi) + gn.getY(vi) * gp.getY(vi) < -0.05;
+            col[vi * 3] = col[vi * 3 + 1] = col[vi * 3 + 2] = inward ? SR_INSIDE_LIT : 1;
           }
           o.geometry.setAttribute("color", new THREE.BufferAttribute(col, 3));
         }
-        /* distances are the table in media/models/sr01.md: panel 0.48,
-           core_top 0.40, tiers 4..1 with their LED rings 0.34 / 0.28 / 0.22 /
-           0.16, plinth 0.10 (so the tiers never hang in the air); body, edges
-           and back stay on the wall. Front goes first. */
+        /* THE TAKE-APART (media/models/sr01.md): the steel first (0.48),
+           then the LED carrier, the frame with its wedges and tape, comes out
+           of the box as one piece (SR_CARRIER_OUT), and last the wedges with
+           their tape step off the frame (SR_WEDGES_OFF), so the frame, the
+           wedges and the strips each read; the box, white inside, stays on
+           the wall. */
         if (/panel/.test(n)) d = 0.48;
-        else if (/core_top/.test(n)) {
-          d = 0.4;
-          t0 = 0.1;
-        } else if ((m = /(?:core_tier|led)_(\d+)/.exec(n))) {
-          d = 0.1 + 0.06 * Math.min(4, +m[1]);
-          t0 = 0.18 + 0.09 * (4 - Math.min(4, +m[1]));
-          if (/core_tier/.test(n)) core = true;
-        } else if (/core_plinth/.test(n)) {
-          d = 0.1;
-          t0 = 0.5;
+        else if (/SR01-frame/.test(n)) {
+          d = SR_CARRIER_OUT;
+          t0 = 0.3;
+          core = true;
+        } else if ((m = /(?:wedge|led)_(\d+)/.exec(n))) {
+          d = SR_CARRIER_OUT;
+          t0 = 0.3;
+          d2 = SR_WEDGES_OFF;
+          t2 = 0.6;
         }
-        if (d) parts.push({ o: o, z: o.position.z, d: d, t0: t0 });
+        if (d) parts.push({ o: o, z: o.position.z, d: d, t0: t0, d2: d2, t2: t2 });
       });
     } else {
       var ply0 = std(0xd6bd92, 0.7);
@@ -3684,7 +3704,7 @@
       RIG.sr = function (ex) {
         for (var i = 0; i < parts.length; i++) {
           var p = parts[i];
-          p.o.position.z = p.z + p.d * sstep(ex, p.t0, p.t0 + 0.36);
+          p.o.position.z = p.z + p.d * sstep(ex, p.t0, p.t0 + 0.36) + p.d2 * sstep(ex, p.t2, p.t2 + 0.36);
         }
         /* the steel is what throws the light back onto the wall: as it
            comes away the wash widens and thins, and the bare tape lights
@@ -3692,7 +3712,7 @@
         var off = sstep(ex, 0.02, 0.5);
         HU.uGain.value = lerp(1, 0.5, off);
         HU.uSpread.value = lerp(0.3, 0.52, off);
-        l.position.z = lz + 0.2 * sstep(ex, 0.2, 0.9); /* the light goes with the LEDs */
+        l.position.z = lz + SR_CARRIER_OUT * sstep(ex, 0.3, 0.66) + SR_WEDGES_OFF * sstep(ex, 0.6, 0.96); /* the light goes with the LEDs */
         l.intensity = lerp(0.3, 1.5, off);
         S.uCol.value.copy(spillCol).multiplyScalar(lerp(1, 1.7, off));
       };
@@ -3732,6 +3752,16 @@
          light, stood off the wall where the face throws it).
      Deep and saturated, nowhere near clipping, hardly any bloom. */
   var BX = { y: 1.45, glow: 1.75 }; /* (1.4 with the daytime face; the artist: brighter) */
+  /* THE COLOUR OF HIS FILMS (photo pass). The face's picture was cut from
+     his film of the box on the wall (IMG_4101, the site's v03) without
+     converting it from HDR (HLG), which leaves a film pale and yellow; the
+     same film converted properly shows a deep, saturated orange (face mean
+     about 210,118,6, the grain a redder 190,75,3), and so do his other
+     films of it lit (v04, v05). So the light through the veneer is that
+     orange now, and a little less of it. ?box=a shows the colour it had
+     before (the pale amber of the unconverted frame), to compare. */
+  var BXA = /[?&]box=a(&|$)/i.test(location.search);
+  if (!BXA) BX.glow = 1.4;
 
   function dayFace(img, noFlip, upright) {
     var S = Math.min(1400, img.naturalWidth || 1400), c = document.createElement("canvas");
@@ -3806,11 +3836,22 @@
        diffuser", and how bright that is; lamp: fuller over the two lamps /
        less at the edges / less again in the corners. */
     var U = {
-      bxGam: { value: new THREE.Vector3(1.0, 1.05, 1.4) },
+      bxGam: { value: BXA ? new THREE.Vector3(1.0, 1.05, 1.4) : new THREE.Vector3(1.0, 1.4, 2.2) },
       bxCon: { value: new THREE.Vector2(0.46, 0.6) },
-      bxTint: { value: new THREE.Vector3(1.0, 0.55, 0.3) },
+      bxTint: { value: BXA ? new THREE.Vector3(1.0, 0.55, 0.3) : new THREE.Vector3(1.0, 0.32, 0.05) },
       bxSeam: { value: new THREE.Vector3(0.09, 0.18, 1.15) }, /* (the old face's seam is white in the file: kept warm, below clipping) */
-      bxLamp: { value: new THREE.Vector3(0.1, 0.07, 0.12) }
+      bxLamp: { value: new THREE.Vector3(0.1, 0.07, 0.12) },
+      /* (photo pass) core: how much fuller and yellower the light is over
+         the lamps than at the edges (his films, front on: a yellow-orange
+         middle, deeper orange toward the edges and corners); halo: the
+         light that comes through the join spreads into the wood either side
+         of it, a few centimetres, yellower (x strength, y step of the taps
+         in UV); view: seen at a slant the veneer passes less, and less of
+         the green (x red, y green, z blue taken off at grazing; his film at
+         about 45 degrees: red 0.9, green 0.64 of the frontal frame) */
+      bxCore: { value: new THREE.Vector2(0.22, 0.3) },
+      bxHalo: { value: new THREE.Vector2(0.22, 0.012) },
+      bxView: { value: new THREE.Vector3(0.35, 0.9, 1.0) }
     };
     RIG.bxU = U;
     RIG.bxFace = null;
@@ -3823,7 +3864,7 @@
     face.onBeforeCompile = function (sh) {
       for (var k in U) sh.uniforms[k] = U[k];
       sh.fragmentShader = sh.fragmentShader
-        .replace("#include <common>", "#include <common>\nuniform vec3 bxGam;\nuniform vec2 bxCon;\nuniform vec3 bxTint;\nuniform vec3 bxSeam;\nuniform vec3 bxLamp;")
+        .replace("#include <common>", "#include <common>\nuniform vec3 bxGam;\nuniform vec2 bxCon;\nuniform vec3 bxTint;\nuniform vec3 bxSeam;\nuniform vec3 bxLamp;\nuniform vec2 bxCore;\nuniform vec2 bxHalo;\nuniform vec3 bxView;")
         .replace(
           "#include <emissivemap_fragment>",
           "#ifdef USE_EMISSIVEMAP\n" +
@@ -3842,6 +3883,21 @@
             "float fE = max( fD.x, fD.y );\n" +
             "float fK = length( max( fD - 0.3, 0.0 ) ) / 0.2;\n" +
             "fC *= ( 1.0 - bxLamp.x + bxLamp.x * min( fLamp, 1.0 ) ) * ( 1.0 - bxLamp.y * smoothstep( 0.22, 0.5, fE ) ) * ( 1.0 - bxLamp.z * fK * fK );\n" +
+            /* (photo pass) the middle fuller and yellower, the rim deeper */
+            "float fM = 1.0 - smoothstep( 0.05, 0.5, length( ( fU - 0.5 ) * vec2( 1.0, 1.15 ) ) );\n" +
+            "fC *= ( 1.0 - 0.5 * bxCore.x + bxCore.x * fM ) * vec3( 1.0, 1.0 + bxCore.y * fM, 1.0 + 1.6 * bxCore.y * fM );\n" +
+            /* light through the join spreads into the leaves beside it:
+               eight taps of the picture's "bare diffuser" round the point */
+            "float fH = 0.0;\n" +
+            "for ( int i = 1; i <= 2; i ++ ) {\n" +
+            "  float o = float( i ) * bxHalo.y, w = i == 1 ? 0.6 : 0.4;\n" +
+            "  fH += w * ( smoothstep( bxSeam.x, bxSeam.y, texture2D( emissiveMap, fU + vec2( o, 0.0 ) ).b ) + smoothstep( bxSeam.x, bxSeam.y, texture2D( emissiveMap, fU - vec2( o, 0.0 ) ).b )\n" +
+            "    + smoothstep( bxSeam.x, bxSeam.y, texture2D( emissiveMap, fU + vec2( 0.0, o ) ).b ) + smoothstep( bxSeam.x, bxSeam.y, texture2D( emissiveMap, fU - vec2( 0.0, o ) ).b ) );\n" +
+            "}\n" +
+            "fC += vec3( 1.0, 0.6, 0.16 ) * bxHalo.x * fH * ( 1.0 - smoothstep( bxSeam.x, bxSeam.y, fT.b ) );\n" +
+            /* seen at a slant: less, and redder */
+            "float fG = 1.0 - clamp( dot( normal, normalize( vViewPosition ) ), 0.0, 1.0 );\n" +
+            "fC *= 1.0 - fG * bxView;\n" +
             /* (no dark margin any more: the veneer runs out to the box's
                outer edges and is lit to them; the artist: "no dark lines") */
             "totalEmissiveRadiance *= fC;\n" +
@@ -3863,8 +3919,14 @@
       /* the frame: birch on its sides (grain round the box), the plies on
          the front rim. One mesh in the file; its triangles are sorted into
          the two by where they lie and given UVs in metres. */
-      var ply = new THREE.MeshStandardMaterial({ name: "MAT-birch_ply", map: birchTexture(), color: 0xe9e0d0, roughness: 0.6, envMapIntensity: 0.05 });
+      /* (photo pass: 0xb48e68, was 0xe9e0d0) in his films the sides are the
+         darkest thing there, a warm dark brown, darker than the wall: no
+         light of the box falls on them, only the orange that comes back off
+         the room; under the room's cooler light the pale birch read as an
+         olive grey band */
+      var ply = new THREE.MeshStandardMaterial({ name: "MAT-birch_ply", map: birchTexture(), color: BXA ? 0xe9e0d0 : 0xb48e68, roughness: 0.6, envMapIntensity: 0.05 });
       tame(ply, 0.6, 0.8);
+      RIG.bxPly = ply;
       var cut = new THREE.MeshStandardMaterial({ name: "MAT-birch_ply_edge", map: plyEdgeTexture(1), color: 0xd8cdbb, roughness: 0.7, envMapIntensity: 0.03 });
       tame(cut, 0.25, 0.7); /* the rim is in the plane of the face: the face does not light it */
       var faceMesh = null, frameMesh = null;
@@ -3979,15 +4041,27 @@
 
     /* The whole face is the source and it faces the room, so its light is
        stood well off the wall: floor and ceiling take it. */
-    var l = new THREE.PointLight(0xff8c38, 1.4, 0, 2); /* (1.15 before the face was brightened) */
+    var l = new THREE.PointLight(BXA ? 0xff8c38 : 0xff7a26, 1.4, 0, 2); /* (1.15 before the face was brightened) */
     l.position.set(X.bx, 1.35, 1.25);
     scene.add(l);
     /* ...and what comes back off the room and off the box's own edges lies
        on the wall round the frame as a soft warm spill, nearest the frame and
        gone within a metre and a half */
-    var S = localLight({ pos: [X.bx, BX.y, 0.46], color: 0xff8a32, power: 0.42, decay: 2, range: 3.6 }); /* (0.34 before the face was brightened) */
+    /* (photo pass) NOT A HALO. The face stands 10 cm off the wall and faces
+       away from it, so none of its light reaches the wall directly: in his
+       films the wall round the box is lit evenly, about half as bright as
+       the face, by what comes back off the room, with no bright ring at
+       the frame. The spill was a source 46 cm off the wall falling off
+       with the square of the distance (a tight round glow nearly as bright
+       as the face, right at the frame); it now stands 1.25 m off, falls off
+       slowly (its range, 3.4 m, ends it at the patch's ends, 3.2 m either
+       side, with no step): a broad warm wash, a little fuller round
+       the box, the face standing clear of it. */
+    var S = localLight({ pos: [X.bx, BX.y, 1.25], color: BXA ? 0xff8a32 : 0xff7a2c, power: 0.36, decay: 1.2, range: 3.4 });
     patch(S, "wall", X.bx - 3.2, X.bx + 3.2, 0, CEIL);
     patch(S, "skirt", X.bx - 3.2, X.bx + 3.2);
+    RIG.bxL = l;
+    RIG.bxS = S;
   }
 
   /* ---- 05: Bulb Studies. Hand-sized, ON A WINDOWSILL: a window is cut into
@@ -9397,7 +9471,7 @@
       },
       /* prototype only: the Light Box face's shader settings, for tuning */
       box: function () {
-        return RIG.bxU ? { u: RIG.bxU, face: RIG.bxFace, redraw: invalidate } : null;
+        return RIG.bxU ? { u: RIG.bxU, face: RIG.bxFace, light: RIG.bxL, spill: RIG.bxS, ply: RIG.bxPly, redraw: invalidate } : null;
       },
       /* the nearest any part of the pen comes to the wall (z = 0) and the
          floor (y = 0) over the whole take-apart range, in metres */
