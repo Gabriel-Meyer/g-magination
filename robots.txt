@@ -1,0 +1,5 @@
+# g-magination.com: everything may be crawled (notes/seo.md)
+User-agent: *
+Allow: /
+
+Sitemap: https://g-magination.com/sitemap.xml

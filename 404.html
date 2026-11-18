@@ -1,0 +1,91 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Not found — g-magination</title>
+<meta name="robots" content="noindex">
+<meta name="theme-color" content="#070605">
+<!-- GitHub Pages serves this page at whatever address was asked for, at any
+     depth: so its few links are root-absolute and its style is inline. No
+     JavaScript. The look is rooms.css's: the same dark, the same type stack,
+     the wordmark of the header (notes/seo.md, "404"). -->
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<style>
+  :root {
+    --bg: #070605;
+    --ink: #efeae3;
+    --mute: #9a9186;
+    --line: rgba(239, 234, 227, 0.16);
+    --accent: #ff7a18;
+    --sans: "Helvetica Neue", Helvetica, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Arial Nova", Arial, sans-serif;
+    --gut: clamp(18px, 4.2vw, 64px);
+  }
+  * { box-sizing: border-box; }
+  html { background: var(--bg); -webkit-text-size-adjust: 100%; }
+  body {
+    margin: 0;
+    min-height: 100vh;
+    min-height: 100svh;
+    display: flex;
+    flex-direction: column;
+    background: var(--bg);
+    color: var(--ink);
+    font-family: var(--sans);
+    font-size: 16px;
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+  }
+  a { color: inherit; }
+  a:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+  header {
+    display: flex;
+    align-items: center;
+    height: 54px;
+    padding: 0 var(--gut);
+    font-size: 13px;
+    border-bottom: 1px solid rgba(239, 234, 227, 0.1);
+  }
+  .mark { color: var(--ink); font-weight: 500; white-space: nowrap; text-decoration: none; }
+  .mark b { font-weight: 400; color: var(--mute); }
+  main {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    padding: 12vh var(--gut);
+    max-width: 44rem;
+  }
+  .eyebrow {
+    margin: 0;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.22em;
+    font-weight: 500;
+    color: var(--mute);
+  }
+  h1 {
+    margin: 20px 0 0;
+    font-weight: 400;
+    letter-spacing: -0.038em;
+    line-height: 1.02;
+    font-size: clamp(2.2rem, 5vw, 3.6rem);
+    text-wrap: balance;
+  }
+  .back {
+    margin: 34px 0 0;
+    font-size: 13.5px;
+  }
+  .back a { text-decoration-color: var(--line); text-underline-offset: 4px; }
+  .back a:hover { text-decoration-color: var(--accent); }
+</style>
+</head>
+<body>
+<header><a class="mark" href="/">g-magination<b> — Gabriel Meyer</b></a></header>
+<main>
+  <p class="eyebrow">404</p>
+  <h1>There is nothing at this address.</h1>
+  <p class="back"><a href="/">Back to the room</a></p>
+</main>
+</body>
+</html>

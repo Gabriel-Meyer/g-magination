@@ -23,20 +23,26 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # The site is plain static files at the repository root: one page, its
-      # stylesheet and two scripts, and the media it loads. The archived old
-      # site (archive/) is not part of the deployment.
+      # The site is plain static files at the repository root: the page, its
+      # stylesheet and scripts, three.js (vendor/), the media it loads, the
+      # legal page, and the crawl files (robots.txt, sitemap.xml, 404.html,
+      # icons). Everything at the root is deployed except the repository's
+      # own files and the archived old site (archive/).
       - name: assemble _site
         run: |
           set -euo pipefail
           mkdir -p _site
-          cp index.html rooms.css rooms.js rooms3d.js _site/
-          cp CNAME _site/
-          cp favicon.svg _site/ 2>/dev/null || true
-          cp -R media _site/
-          find _site -name '.DS_Store' -delete
+          rsync -a \
+            --exclude='/.git' --exclude='/.github' --exclude='/.gitignore' \
+            --exclude='/archive' --exclude='/_site' --exclude='.DS_Store' \
+            ./ _site/
+          for f in index.html rooms.css rooms.js rooms3d.js CNAME favicon.svg \
+                   robots.txt sitemap.xml 404.html impressum.html \
+                   vendor/three-0.160.0/build/three.module.min.js; do
+            test -f "_site/$f" || { echo "missing in _site: $f"; exit 1; }
+          done
           du -sh _site
-          find _site -maxdepth 2 | sort | head -40
+          find _site -maxdepth 2 | sort | head -60
 
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3

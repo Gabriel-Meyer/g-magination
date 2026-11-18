@@ -131,7 +131,7 @@
       return;
     }
 
-  var CDN = "https://cdn.jsdelivr.net/npm/three@0.160.0/";
+  var CDN = "./vendor/three-0.160.0/"; /* three.js r160, self-hosted: the files of the npm package, byte for byte (vendor/three-0.160.0, notes/seo.md) */
   var COARSE = window.matchMedia("(pointer: coarse)").matches;
   /* THE PHONE LAYOUT ("stage and dossier", rooms.css): a portrait screen no
      wider than 820 px. Landscape phones and anything wider keep the desk
@@ -914,10 +914,7 @@
   var capSt = null; /* the station the caption is for */
   var sheetOpen = false;
   var openSt = null, openY = 0, opener = null, pushed = false, pendingJump = null;
-  var hintDone = false;
-  try {
-    hintDone = sessionStorage.getItem("rooms-hint") === "1";
-  } catch (e) {}
+  var hintDone = false; /* kept in memory only: the page stores nothing in the browser but the Motion choice (legal-text.mjs) */
 
   /* what each station's caption holds, read once from its column */
   STN.forEach(function (st) {
@@ -1013,9 +1010,6 @@
       var show = !hintDone && !used && !!a && a.st.i === 0 && !a.beat;
       if (!show && !capHint.hidden && !hintDone) {
         hintDone = true;
-        try {
-          sessionStorage.setItem("rooms-hint", "1");
-        } catch (e) {}
       }
       capHint.hidden = !show;
     }

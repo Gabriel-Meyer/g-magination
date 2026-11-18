@@ -917,6 +917,16 @@ html:not(.gl) .pass {
   text-underline-offset: 4px;
 }
 
+/* the legal line under the contact line (Impressum, Datenschutz): quieter,
+   and close to it. Only there when content/legal.json says publish. */
+.more__l {
+  margin-top: 6px;
+}
+
+.more__l a {
+  color: var(--mute);
+}
+
 /* ---------- control strip ---------- */
 
 .hud {
@@ -1638,6 +1648,12 @@ html[data-motion="reduced"] .hud {
   .more__list a {
     min-height: 44px;
     padding: 10px 0;
+    align-items: center;
+  }
+
+  /* the links are 44 px tall here; "Vienna" (a plain span) sits on their
+     middle line instead of at the top of the row */
+  .more__c {
     align-items: center;
   }
 
